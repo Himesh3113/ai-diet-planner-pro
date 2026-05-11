@@ -9,8 +9,14 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    "**/.next/**",
+    "ai-diet-planner-pro/**",
     "out/**",
+    "**/out/**",
     "build/**",
+    "**/build/**",
+    "node_modules/**",
+    "**/node_modules/**",
     "next-env.d.ts",
   ]),
 ]);
