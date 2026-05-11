@@ -57,9 +57,13 @@ export function SignupForm() {
     });
 
     if (error) {
+      const isRateLimited = error.message.toLowerCase().includes("rate limit");
+
       toast({
-        title: "Signup failed",
-        description: error.message,
+        title: isRateLimited ? "Email rate limit reached" : "Signup failed",
+        description: isRateLimited
+          ? "Supabase is temporarily blocking more confirmation emails. Wait a few minutes, then try again or sign in if this account already exists."
+          : error.message,
         variant: "error",
       });
       return;

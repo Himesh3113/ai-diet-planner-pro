@@ -7,6 +7,7 @@ import {
   Activity,
   Bell,
   CalendarDays,
+  ClipboardList,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -24,12 +25,14 @@ export type DashboardUser = {
   email: string;
   fullName: null | string;
   id: string;
+  onboardingCompleted: boolean;
   role: string;
 };
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "#profile", icon: User, label: "Profile" },
+  { href: "/onboarding", icon: ClipboardList, label: "Onboarding" },
+  { href: "/profile", icon: User, label: "Profile" },
   { href: "#activity", icon: Activity, label: "Activity" },
   { href: "#schedule", icon: CalendarDays, label: "Schedule" },
   { href: "#settings", icon: Settings, label: "Settings" },
@@ -64,7 +67,7 @@ function SidebarContent({
           <div>
             <p className="text-sm font-black tracking-tight text-white">AI Diet Planner Pro</p>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">
-              Dashboard
+              {user.onboardingCompleted ? "Dashboard" : "Setup required"}
             </p>
           </div>
         </Link>
@@ -72,7 +75,7 @@ function SidebarContent({
 
       <nav className="flex-1 space-y-1 px-3">
         {navItems.map(({ href, icon: Icon, label }) => {
-          const active = href === "/dashboard" && pathname === "/dashboard";
+          const active = href.startsWith("/") && pathname === href;
 
           return (
             <Link
@@ -207,10 +210,10 @@ export function DashboardShell({
               </button>
               <div>
                 <p className="text-sm font-bold uppercase tracking-[0.2em] text-brand-neon">
-                  Phase 1
+                  Phase 2
                 </p>
                 <h1 className="text-lg font-black tracking-tight text-white sm:text-xl">
-                  Auth Dashboard
+                  Profile Dashboard
                 </h1>
               </div>
             </div>

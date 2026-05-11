@@ -1,17 +1,12 @@
-import { redirect } from "next/navigation";
 import { DashboardShell, type DashboardUser } from "@/components/dashboard/dashboard-shell";
 import { getProtectedProfileContext } from "@/lib/profile";
 
-export default async function DashboardLayout({
+export default async function ProfileLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const { email, profile, user } = await getProtectedProfileContext();
-
-  if (!profile?.onboarding_completed) {
-    redirect("/onboarding");
-  }
 
   const dashboardUser: DashboardUser = {
     avatarUrl: profile?.avatar_url ?? null,

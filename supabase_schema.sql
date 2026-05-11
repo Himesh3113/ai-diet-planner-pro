@@ -75,3 +75,98 @@ $$ language plpgsql security definer;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- Phase 2 safe onboarding/profile extension.
+-- Run this section in Supabase SQL editor if your project already has the Phase 1 schema.
+alter table public.user_metrics
+  add column if not exists training_preference text,
+  add column if not exists gym_category text,
+  add column if not exists non_gym_category text;
+
+alter table public.user_metrics
+  drop constraint if exists user_metrics_goal_check;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'user_metrics_goal_check'
+  ) then
+    alter table public.user_metrics
+      add constraint user_metrics_goal_check
+      check (
+        goal in (
+          'weight_loss',
+          'muscle_gain',
+          'maintenance',
+          'healthy_lifestyle',
+          'bulking',
+          'cutting',
+          'muscle_building',
+          'fat_loss',
+          'lean_bulk',
+          'strength_training',
+          'weight_gain',
+          'diabetic_diet',
+          'maintenance_diet'
+        )
+      );
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'user_metrics_training_preference_check'
+  ) then
+    alter table public.user_metrics
+      add constraint user_metrics_training_preference_check
+      check (training_preference in ('gym', 'non_gym'));
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'user_metrics_gym_category_check'
+  ) then
+    alter table public.user_metrics
+      add constraint user_metrics_gym_category_check
+      check (
+        gym_category is null
+        or gym_category in (
+          'bulking',
+          'cutting',
+          'muscle_building',
+          'fat_loss',
+          'lean_bulk',
+          'strength_training'
+        )
+      );
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'user_metrics_non_gym_category_check'
+  ) then
+    alter table public.user_metrics
+      add constraint user_metrics_non_gym_category_check
+      check (
+        non_gym_category is null
+        or non_gym_category in (
+          'weight_loss',
+          'weight_gain',
+          'healthy_lifestyle',
+          'diabetic_diet',
+          'maintenance_diet'
+        )
+      );
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'profiles'
+      and policyname = 'Users can insert their own profile.'
+  ) then
+    create policy "Users can insert their own profile."
+      on public.profiles for insert
+      with check ( auth.uid() = id );
+  end if;
+end $$;
