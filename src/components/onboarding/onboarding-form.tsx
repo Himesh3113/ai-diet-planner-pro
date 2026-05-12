@@ -205,10 +205,11 @@ export function OnboardingForm({
     };
 
     const metricsPayload: MetricsInsert = {
+      user_id: userId,
       activity_level: values.activityLevel,
       age: values.age,
       allergies: values.allergies,
-      diet_type: values.dietType,
+      diet_type: values.dietType as MetricsInsert["diet_type"],
       food_preferences: values.foodPreferences,
       gender: values.gender,
       goal,
@@ -224,7 +225,6 @@ export function OnboardingForm({
       training_preference: values.trainingPreference,
       training_type: values.trainingPreference === "gym" ? "gym" : "home",
       updated_at: now,
-      user_id: userId,
       weight: values.weight,
     };
 
