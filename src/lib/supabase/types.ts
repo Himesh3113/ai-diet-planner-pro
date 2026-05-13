@@ -119,6 +119,68 @@ export type Database = {
           },
         ];
       };
+      ai_assistant_messages: {
+        Row: {
+          content: string;
+          created_at: string;
+          id: string;
+          model: string | null;
+          role: "user" | "assistant";
+          user_id: string;
+        };
+        Insert: {
+          content: string;
+          created_at?: string;
+          id?: string;
+          model?: string | null;
+          role: "user" | "assistant";
+          user_id: string;
+        };
+        Update: {
+          content?: string;
+          created_at?: string;
+          id?: string;
+          model?: string | null;
+          role?: "user" | "assistant";
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "ai_assistant_messages_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
+      ai_assistant_rate_limits: {
+        Row: {
+          message_count: number;
+          updated_at: string;
+          user_id: string;
+          window_start: string;
+        };
+        Insert: {
+          message_count?: number;
+          updated_at?: string;
+          user_id: string;
+          window_start: string;
+        };
+        Update: {
+          message_count?: number;
+          updated_at?: string;
+          user_id?: string;
+          window_start?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "ai_assistant_rate_limits_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
       user_metrics: {
         Row: {
           activity_level:

@@ -263,3 +263,65 @@ create policy "Users can insert their own daily progress logs." on public.daily_
 
 create policy "Users can update their own daily progress logs." on public.daily_progress_logs
   for update using (auth.uid() = user_id);
+
+-- 11. AI Assistant Messages
+create table if not exists public.ai_assistant_messages (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  role text not null check (role in ('user', 'assistant')),
+  content text not null,
+  model text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists ai_assistant_messages_user_created_at_idx
+  on public.ai_assistant_messages (user_id, created_at desc);
+
+alter table public.ai_assistant_messages enable row level security;
+
+drop policy if exists "Users can view their own assistant messages." on public.ai_assistant_messages;
+drop policy if exists "Users can insert their own assistant messages." on public.ai_assistant_messages;
+drop policy if exists "Users can delete their own assistant messages." on public.ai_assistant_messages;
+
+create policy "Users can view their own assistant messages." on public.ai_assistant_messages
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own assistant messages." on public.ai_assistant_messages
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can delete their own assistant messages." on public.ai_assistant_messages
+  for delete using (auth.uid() = user_id);
+
+-- 12. AI Assistant Rate Limits
+create table if not exists public.ai_assistant_rate_limits (
+  user_id uuid references public.profiles(id) on delete cascade not null primary key,
+  window_start timestamp with time zone not null,
+  message_count integer not null default 0 check (message_count >= 0),
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger where tgname = 'ai_assistant_rate_limits_set_updated_at'
+  ) then
+    create trigger ai_assistant_rate_limits_set_updated_at
+      before update on public.ai_assistant_rate_limits
+      for each row execute procedure public.set_updated_at();
+  end if;
+end $$;
+
+alter table public.ai_assistant_rate_limits enable row level security;
+
+drop policy if exists "Users can view their own assistant rate limits." on public.ai_assistant_rate_limits;
+drop policy if exists "Users can insert their own assistant rate limits." on public.ai_assistant_rate_limits;
+drop policy if exists "Users can update their own assistant rate limits." on public.ai_assistant_rate_limits;
+
+create policy "Users can view their own assistant rate limits." on public.ai_assistant_rate_limits
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own assistant rate limits." on public.ai_assistant_rate_limits
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own assistant rate limits." on public.ai_assistant_rate_limits
+  for update using (auth.uid() = user_id);
