@@ -31,6 +31,17 @@ function round1(n: number) {
   return Math.round(n * 10) / 10;
 }
 
+function optionalNotesUnavailable(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybeError = error as { code?: string; message?: string };
+  return (
+    maybeError.code === "42P01" ||
+    maybeError.code === "PGRST205" ||
+    (typeof maybeError.message === "string" &&
+      maybeError.message.toLowerCase().includes("health_condition_notes"))
+  );
+}
+
 export function MealRecommendationsSection() {
   const [metrics, setMetrics] = useState<MetricsRow | null>(null);
   const [notes, setNotes] = useState<HealthNotesRow | null>(null);
@@ -70,15 +81,28 @@ export function MealRecommendationsSection() {
           ]);
 
         if (mErr) throw mErr;
-        if (nErr) throw nErr;
         if (cancelled) return;
         setMetrics(m ?? null);
-        setNotes(n ?? null);
+        setNotes(nErr && optionalNotesUnavailable(nErr) ? null : (n ?? null));
+        if (nErr && !optionalNotesUnavailable(nErr)) {
+          setError(
+            "Health notes could not be loaded, so meal ideas are using profile metrics only.",
+          );
+        }
         setLoadState("ready");
       } catch (e) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load");
-        setLoadState("error");
+        const message =
+          e instanceof Error ? e.message : "Profile metrics could not be loaded.";
+        if (message === "Not authenticated") {
+          setError("Sign in again to load meal ideas.");
+          setLoadState("error");
+          return;
+        }
+        setMetrics(null);
+        setNotes(null);
+        setError(`Using default meal ideas because profile metrics failed: ${message}`);
+        setLoadState("ready");
       }
     }
 
@@ -148,9 +172,18 @@ export function MealRecommendationsSection() {
           ))}
         </div>
       ) : loadState === "error" ? (
-        <p className="mt-6 text-sm text-red-200/90">{error}</p>
+        <div className="mt-6 rounded-lg border border-red-300/15 bg-red-400/[0.06] p-4">
+          <p className="text-sm font-semibold text-red-100">
+            {error ?? "Meal ideas could not load."}
+          </p>
+        </div>
       ) : plan ? (
         <div className="mt-6 space-y-6">
+          {error ? (
+            <div className="rounded-lg border border-amber-300/15 bg-amber-300/[0.05] px-4 py-3 text-xs leading-relaxed text-amber-100/85">
+              {error}
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-3 rounded-lg border border-white/[0.07] bg-white/[0.03] px-4 py-3 text-xs text-white/50">
             <span className="inline-flex items-center gap-1.5 font-bold text-white/70">
               <ChefHat className="h-3.5 w-3.5 text-brand-neon" />
