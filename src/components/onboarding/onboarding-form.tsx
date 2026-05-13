@@ -262,6 +262,33 @@ export function OnboardingForm({
           : "Your dashboard is ready for the next phase.",
       variant: "success",
     });
+
+    // The dashboard is guarded by server-side logic reading `profiles.onboarding_completed`.
+    // After upserts, Supabase may not reflect the updated flag immediately for the next server render.
+    // Poll briefly to avoid an immediate redirect loop back to `/onboarding`.
+    if (mode !== "profile") {
+      const maxAttempts = 6; // ~2s total with 350ms backoff-ish
+      const delayMs = 350;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const { data: latestProfile } = await supabase
+          .from("profiles")
+          .select("onboarding_completed")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (latestProfile?.onboarding_completed === true) {
+          break;
+        }
+
+        await new Promise((r) => setTimeout(r, delayMs));
+
+        if (attempt === maxAttempts - 1) {
+          // Fall through; we'll still navigate to avoid blocking the user.
+        }
+      }
+    }
+
     router.push(mode === "profile" ? "/profile" : "/dashboard");
     router.refresh();
   });
