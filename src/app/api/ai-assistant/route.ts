@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { buildNutritionTargets } from "@/lib/meal-recommendations/nutrition-from-metrics";
+import { contextFromMetrics } from "@/lib/ai-assistant/context-from-metrics";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/server";
 
@@ -284,9 +285,10 @@ export async function POST(request: NextRequest) {
       ]);
 
     const model = getOpenRouterModel();
+    // Build a concise context for the AI using the fetched data
     const context = buildContext({
       metrics: metrics ?? null,
-      notes: notes ?? null,
+      notes,
       foodEntries: foods ?? [],
       progressLogs: progress ?? [],
     });

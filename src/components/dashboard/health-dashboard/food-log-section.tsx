@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { buildNutritionTargets } from "@/lib/meal-recommendations/nutrition-from-metrics";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/client";
+import { useToast } from "@/components/ui/toast";
 
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
 type FoodEntry = Database["public"]["Tables"]["food_entries"]["Row"];
@@ -163,6 +164,7 @@ function EntriesSkeleton() {
 }
 
 export function FoodLogSection({ metrics }: Props) {
+  const { toast } = useToast();
   const [entries, setEntries] = useState<FoodEntry[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
     "loading",
@@ -215,13 +217,12 @@ export function FoodLogSection({ metrics }: Props) {
       if (authErr) throw authErr;
       if (!user) throw new Error("Sign in again to load food entries.");
 
+      // Load food entries with graceful error handling
       const { data, error: logErr } = await supabase
         .from("food_entries")
         .select("*")
         .eq("user_id", user.id)
-        .eq("logged_on", logDate)
-        .order("created_at", { ascending: false });
-
+        .eq("logged_on", logDate);
       if (logErr) throw logErr;
       setEntries(data ?? []);
       setLoadState("ready");
