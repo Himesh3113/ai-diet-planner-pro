@@ -95,6 +95,57 @@ function ProgressCard({
   );
 }
 
+function RemainingCaloriesCard({
+  consumed,
+  target,
+}: {
+  consumed: number;
+  target: number | null;
+}) {
+  const remaining = target == null ? null : target - consumed;
+  const pct = target ? clamp((consumed / target) * 100, 0, 100) : 0;
+
+  return (
+    <div className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/32">
+            Target balance
+          </p>
+          <p className="mt-2 text-sm font-black text-white">Calories remaining</p>
+        </div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/[0.06] text-brand-neon">
+          <Flame className="h-5 w-5" />
+        </div>
+      </div>
+      <p className="mt-3 text-2xl font-black tabular-nums text-white">
+        {remaining == null ? "—" : Math.abs(Math.round(remaining))}
+        {remaining != null ? <span className="ml-1 text-sm text-white/35">kcal</span> : null}
+      </p>
+      <p className="mt-1 text-xs text-white/38">
+        {remaining == null
+          ? "Complete profile metrics to calculate remaining calories"
+          : remaining >= 0
+            ? `${Math.round(consumed)} of ${target} kcal consumed`
+            : `${Math.abs(Math.round(remaining))} kcal over target`}
+      </p>
+      <div
+        className="mt-3 h-2 rounded-full bg-white/[0.06]"
+        role="progressbar"
+        aria-label="Consumed calories against target"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(pct)}
+      >
+        <div
+          className="h-full rounded-full bg-brand-neon transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function EntriesSkeleton() {
   return (
     <div className="grid gap-3 lg:grid-cols-4">
@@ -119,6 +170,7 @@ export function FoodLogSection({ metrics }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [mealType, setMealType] = useState<MealType>("breakfast");
   const [foodName, setFoodName] = useState("");
+  const [quantity, setQuantity] = useState("");
   const [calories, setCalories] = useState("");
   const [proteinG, setProteinG] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -190,11 +242,16 @@ export function FoodLogSection({ metrics }: Props) {
   async function addEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = foodName.trim();
+    const serving = quantity.trim();
     const caloriesValue = Math.round(Number(calories));
     const proteinValue = Number(proteinG || 0);
 
     if (!name || !Number.isFinite(caloriesValue) || caloriesValue < 0) {
       setError("Add a food name and valid calories.");
+      return;
+    }
+    if (!serving) {
+      setError("Add a quantity or serving size.");
       return;
     }
     if (!Number.isFinite(proteinValue) || proteinValue < 0) {
@@ -219,6 +276,7 @@ export function FoodLogSection({ metrics }: Props) {
           user_id: user.id,
           meal_type: mealType,
           food_name: name,
+          quantity: serving,
           calories: caloriesValue,
           protein_g: proteinValue,
           logged_on: logDate,
@@ -229,6 +287,7 @@ export function FoodLogSection({ metrics }: Props) {
       if (insertErr) throw insertErr;
       setEntries((current) => [data, ...current]);
       setFoodName("");
+      setQuantity("");
       setCalories("");
       setProteinG("");
       setLoadState("ready");
@@ -292,7 +351,7 @@ export function FoodLogSection({ metrics }: Props) {
         </Button>
       </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <ProgressCard
           label="Calories consumed"
           icon="calories"
@@ -307,13 +366,17 @@ export function FoodLogSection({ metrics }: Props) {
           target={targets.dailyProteinG}
           unit="g"
         />
+        <RemainingCaloriesCard
+          consumed={consumed.calories}
+          target={targets.dailyCalories}
+        />
       </div>
 
       <form
         onSubmit={addEntry}
         className="mt-6 rounded-lg border border-white/[0.07] bg-white/[0.03] p-4"
       >
-        <div className="grid gap-3 md:grid-cols-[1fr_1.4fr_0.8fr_0.8fr_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-[0.9fr_1.2fr_1fr_0.75fr_0.75fr_auto] md:items-end">
           <div className="space-y-2">
             <label
               htmlFor="food-meal-type"
@@ -340,6 +403,13 @@ export function FoodLogSection({ metrics }: Props) {
             value={foodName}
             onChange={(event) => setFoodName(event.target.value)}
             placeholder="Greek yogurt bowl"
+          />
+          <Input
+            id="food-quantity"
+            label="Quantity"
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+            placeholder="1 bowl"
           />
           <Input
             id="food-calories"
@@ -443,7 +513,8 @@ export function FoodLogSection({ metrics }: Props) {
                               {entry.food_name}
                             </p>
                             <p className="mt-1 text-[11px] text-white/38">
-                              {entry.calories} kcal · {formatProtein(Number(entry.protein_g))} g
+                              {entry.quantity} · {entry.calories} kcal ·{" "}
+                              {formatProtein(Number(entry.protein_g))} g
                             </p>
                           </div>
                           <button

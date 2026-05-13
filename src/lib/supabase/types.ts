@@ -45,6 +45,7 @@ export type Database = {
           logged_on: string;
           meal_type: "breakfast" | "lunch" | "dinner" | "snacks";
           protein_g: number;
+          quantity: string;
           user_id: string;
         };
         Insert: {
@@ -55,6 +56,7 @@ export type Database = {
           logged_on?: string;
           meal_type: "breakfast" | "lunch" | "dinner" | "snacks";
           protein_g?: number;
+          quantity?: string;
           user_id: string;
         };
         Update: {
@@ -65,6 +67,7 @@ export type Database = {
           logged_on?: string;
           meal_type?: "breakfast" | "lunch" | "dinner" | "snacks";
           protein_g?: number;
+          quantity?: string;
           user_id?: string;
         };
         Relationships: [

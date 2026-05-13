@@ -185,11 +185,24 @@ create table if not exists public.food_entries (
   user_id uuid references public.profiles(id) on delete cascade not null,
   meal_type text not null check (meal_type in ('breakfast', 'lunch', 'dinner', 'snacks')),
   food_name text not null,
+  quantity text not null default '1 serving',
   calories integer not null check (calories >= 0),
   protein_g numeric not null default 0 check (protein_g >= 0),
   logged_on date not null default current_date,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'food_entries'
+      and column_name = 'quantity'
+  ) then
+    alter table public.food_entries add column quantity text not null default '1 serving';
+  end if;
+end $$;
 
 create index if not exists food_entries_user_logged_on_idx
   on public.food_entries (user_id, logged_on, created_at desc);
