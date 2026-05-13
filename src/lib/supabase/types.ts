@@ -36,6 +36,46 @@ export type Database = {
         };
         Relationships: [];
       };
+      food_entries: {
+        Row: {
+          calories: number;
+          created_at: string;
+          food_name: string;
+          id: string;
+          logged_on: string;
+          meal_type: "breakfast" | "lunch" | "dinner" | "snacks";
+          protein_g: number;
+          user_id: string;
+        };
+        Insert: {
+          calories: number;
+          created_at?: string;
+          food_name: string;
+          id?: string;
+          logged_on?: string;
+          meal_type: "breakfast" | "lunch" | "dinner" | "snacks";
+          protein_g?: number;
+          user_id: string;
+        };
+        Update: {
+          calories?: number;
+          created_at?: string;
+          food_name?: string;
+          id?: string;
+          logged_on?: string;
+          meal_type?: "breakfast" | "lunch" | "dinner" | "snacks";
+          protein_g?: number;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "food_entries_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
       user_metrics: {
         Row: {
           activity_level:

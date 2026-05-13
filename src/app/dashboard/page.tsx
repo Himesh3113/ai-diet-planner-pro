@@ -12,6 +12,7 @@ import { DailyRoutineSection } from "@/components/dashboard/health-dashboard/dai
 import { HealthConditionsSection } from "@/components/dashboard/health-dashboard/health-conditions-section";
 import { NutritionOverviewCards } from "@/components/dashboard/health-dashboard/nutrition-overview-cards";
 import { UserSummaryCards } from "@/components/dashboard/health-dashboard/user-summary-cards";
+import { FoodLogSection } from "@/components/dashboard/health-dashboard/food-log-section";
 
 export default async function DashboardPage() {
   const { metrics, profile } = await getProtectedProfileContext();
@@ -83,6 +84,8 @@ export default async function DashboardPage() {
         <AIAssistantWidget />
       </section>
 
+      <FoodLogSection metrics={metrics} />
+
       <MealRecommendationsSection />
 
       <WeeklyAnalyticsSection />
@@ -93,4 +96,3 @@ export default async function DashboardPage() {
     </div>
   );
 }
-

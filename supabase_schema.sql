@@ -179,3 +179,32 @@ create policy "Users can insert their own health condition notes." on public.hea
 create policy "Users can update their own health condition notes." on public.health_condition_notes
   for update using (auth.uid() = user_id);
 
+-- 9. Food Entries (Daily food logging)
+create table if not exists public.food_entries (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  meal_type text not null check (meal_type in ('breakfast', 'lunch', 'dinner', 'snacks')),
+  food_name text not null,
+  calories integer not null check (calories >= 0),
+  protein_g numeric not null default 0 check (protein_g >= 0),
+  logged_on date not null default current_date,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists food_entries_user_logged_on_idx
+  on public.food_entries (user_id, logged_on, created_at desc);
+
+alter table public.food_entries enable row level security;
+
+drop policy if exists "Users can view their own food entries." on public.food_entries;
+drop policy if exists "Users can insert their own food entries." on public.food_entries;
+drop policy if exists "Users can delete their own food entries." on public.food_entries;
+
+create policy "Users can view their own food entries." on public.food_entries
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own food entries." on public.food_entries
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can delete their own food entries." on public.food_entries
+  for delete using (auth.uid() = user_id);
