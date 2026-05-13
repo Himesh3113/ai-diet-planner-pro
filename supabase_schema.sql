@@ -221,3 +221,45 @@ create policy "Users can insert their own food entries." on public.food_entries
 
 create policy "Users can delete their own food entries." on public.food_entries
   for delete using (auth.uid() = user_id);
+
+-- 10. Daily Progress Logs (analytics snapshots)
+create table if not exists public.daily_progress_logs (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  logged_on date not null default current_date,
+  weight_kg numeric,
+  bmi numeric,
+  water_ml integer not null default 0 check (water_ml >= 0),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique (user_id, logged_on)
+);
+
+create index if not exists daily_progress_logs_user_logged_on_idx
+  on public.daily_progress_logs (user_id, logged_on desc);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger where tgname = 'daily_progress_logs_set_updated_at'
+  ) then
+    create trigger daily_progress_logs_set_updated_at
+      before update on public.daily_progress_logs
+      for each row execute procedure public.set_updated_at();
+  end if;
+end $$;
+
+alter table public.daily_progress_logs enable row level security;
+
+drop policy if exists "Users can view their own daily progress logs." on public.daily_progress_logs;
+drop policy if exists "Users can insert their own daily progress logs." on public.daily_progress_logs;
+drop policy if exists "Users can update their own daily progress logs." on public.daily_progress_logs;
+
+create policy "Users can view their own daily progress logs." on public.daily_progress_logs
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own daily progress logs." on public.daily_progress_logs
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own daily progress logs." on public.daily_progress_logs
+  for update using (auth.uid() = user_id);

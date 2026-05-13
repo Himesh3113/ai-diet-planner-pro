@@ -79,6 +79,46 @@ export type Database = {
           },
         ];
       };
+      daily_progress_logs: {
+        Row: {
+          bmi: number | null;
+          created_at: string;
+          id: string;
+          logged_on: string;
+          updated_at: string;
+          user_id: string;
+          water_ml: number;
+          weight_kg: number | null;
+        };
+        Insert: {
+          bmi?: number | null;
+          created_at?: string;
+          id?: string;
+          logged_on?: string;
+          updated_at?: string;
+          user_id: string;
+          water_ml?: number;
+          weight_kg?: number | null;
+        };
+        Update: {
+          bmi?: number | null;
+          created_at?: string;
+          id?: string;
+          logged_on?: string;
+          updated_at?: string;
+          user_id?: string;
+          water_ml?: number;
+          weight_kg?: number | null;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "daily_progress_logs_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
       user_metrics: {
         Row: {
           activity_level:

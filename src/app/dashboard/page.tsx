@@ -13,6 +13,7 @@ import { HealthConditionsSection } from "@/components/dashboard/health-dashboard
 import { NutritionOverviewCards } from "@/components/dashboard/health-dashboard/nutrition-overview-cards";
 import { UserSummaryCards } from "@/components/dashboard/health-dashboard/user-summary-cards";
 import { FoodLogSection } from "@/components/dashboard/health-dashboard/food-log-section";
+import { ProgressAnalyticsSection } from "@/components/dashboard/health-dashboard/progress-analytics-section";
 
 export default async function DashboardPage() {
   const { metrics, profile } = await getProtectedProfileContext();
@@ -85,6 +86,8 @@ export default async function DashboardPage() {
       </section>
 
       <FoodLogSection metrics={metrics} />
+
+      <ProgressAnalyticsSection metrics={metrics} />
 
       <MealRecommendationsSection />
 
