@@ -127,3 +127,55 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- 8. Health Condition Notes (V1)
+-- One row per user with notes for each condition.
+create table if not exists public.health_condition_notes (
+  user_id uuid references public.profiles(id) on delete cascade not null primary key,
+
+  acne text,
+  migraine text,
+  knee_pain text,
+  hair_fall text,
+
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- updated_at trigger
+create or replace function public.set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = timezone('utc'::text, now());
+  return new;
+end;
+$$ language plpgsql;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger where tgname = 'health_condition_notes_set_updated_at'
+  ) then
+    create trigger health_condition_notes_set_updated_at
+      before update on public.health_condition_notes
+      for each row execute procedure public.set_updated_at();
+  end if;
+end $$;
+
+-- Enable RLS
+alter table public.health_condition_notes enable row level security;
+
+-- Policies
+drop policy if exists "Users can view their own health condition notes." on public.health_condition_notes;
+drop policy if exists "Users can insert their own health condition notes." on public.health_condition_notes;
+drop policy if exists "Users can update their own health condition notes." on public.health_condition_notes;
+
+create policy "Users can view their own health condition notes." on public.health_condition_notes
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own health condition notes." on public.health_condition_notes
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own health condition notes." on public.health_condition_notes
+  for update using (auth.uid() = user_id);
+

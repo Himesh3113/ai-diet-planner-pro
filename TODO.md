@@ -1,12 +1,23 @@
-# TODO - Onboarding redirect fix
+# TODO — Health Dashboard V1
 
-- [ ] Identify why router push("/dashboard") doesn’t result in navigation after onboarding completion.
-- [x] Fix onboarding_completed handling if it’s written but not immediately reflected in server-side middleware/layout.
-- [x] Ensure client-side redirect to `/dashboard` happens after DB updates and session/profile context refresh.
+## Step 1: Inventory & context
+- [x] Locate existing dashboard entrypoints and shell (outer project path `ai-diet-planner-pro/src/...`)
+- [x] Confirm onboarding/auth guard behavior
 
-- [x] Verify middleware allows `/dashboard` and doesn’t redirect back to `/onboarding` due to stale profile.
-- [x] Implement minimal code changes preserving existing UI and Supabase logic.
-- [x] Show changed files before editing.
-- [x] Apply fixes automatically and run basic checks (TypeScript build / lint if available).
+## Step 2: Proposed edit plan (approved by user)
+- [x] Plan prepared for dashboard UI upgrade only
+- [x] AI assistant widget set to interactive (expand/collapse + message input stub), no backend call
 
+## Step 3: Implement changes (in progress)
+- [ ] Show all changed files before editing
+- [x] Approved file set identified (dashboard page + new health-dashboard components)
+- [x] Update `ai-diet-planner-pro/src/app/dashboard/page.tsx`
+- [x] Add dashboard components under `ai-diet-planner-pro/src/components/dashboard/health-dashboard/*`
+
+
+
+## Step 4: Verification
+- [ ] TypeScript correctness
+- [ ] Run `npm run build`
+- [ ] Report changed files + build result + warnings/errors
 
