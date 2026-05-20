@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChefHat,
   Sparkles,
@@ -10,9 +10,10 @@ import {
   Drumstick,
   Save,
   Check,
+  AlertCircle,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -24,6 +25,7 @@ import {
   type DietGoal,
   type PreferredFoodKey,
 } from "@/lib/diet-planner/constants";
+import type { DietPlannerSnapshot } from "@/lib/diet-planner/db";
 import type { DailyDietPlan, MealMacros, MealPlanSlot, MealSlot } from "@/lib/diet-planner/types";
 
 const MEAL_SLOTS: { key: MealSlot; label: string }[] = [
@@ -32,6 +34,8 @@ const MEAL_SLOTS: { key: MealSlot; label: string }[] = [
   { key: "dinner", label: "Dinner" },
   { key: "snacks", label: "Snacks" },
 ];
+
+const LOAD_TIMEOUT_MS = 12_000;
 
 function MacroPills({ slot }: { slot: MealMacros }) {
   return (
@@ -73,6 +77,29 @@ function MealCard({ label, slot }: { label: string; slot: MealPlanSlot }) {
   );
 }
 
+function applySnapshot(
+  snapshot: DietPlannerSnapshot,
+  setters: {
+    setGoal: (g: DietGoal) => void;
+    setPreferredFoods: (f: PreferredFoodKey[]) => void;
+    setDietFilter: (d: DietFilter) => void;
+    setIndianFoodPriority: (v: boolean) => void;
+    setAffordability: (a: Affordability) => void;
+    setPlan: (p: DailyDietPlan | null) => void;
+    setPlanSource: (s: "ai" | "fallback" | null) => void;
+  },
+) {
+  if (snapshot.preferences) {
+    setters.setGoal(snapshot.preferences.goal);
+    setters.setPreferredFoods(snapshot.preferences.preferredFoods);
+    setters.setDietFilter(snapshot.preferences.dietFilter);
+    setters.setIndianFoodPriority(snapshot.preferences.indianFoodPriority);
+    setters.setAffordability(snapshot.preferences.affordability);
+  }
+  setters.setPlan(snapshot.plan);
+  setters.setPlanSource(snapshot.planSource);
+}
+
 export function DietPlannerSection() {
   const { toast } = useToast();
   const [goal, setGoal] = useState<DietGoal>("maintenance");
@@ -83,59 +110,64 @@ export function DietPlannerSection() {
   const [plan, setPlan] = useState<DailyDietPlan | null>(null);
   const [planSource, setPlanSource] = useState<"ai" | "fallback" | null>(null);
 
-  const [loadState, setLoadState] = useState<"loading" | "ready">("loading");
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const loadRequestId = useRef(0);
 
   const loadPreferences = useCallback(async () => {
+    const requestId = ++loadRequestId.current;
+    setLoadState("loading");
+    setLoadError(null);
+
+    const timeout = window.setTimeout(() => {
+      if (loadRequestId.current !== requestId) return;
+      setLoadState("error");
+      setLoadError("Loading timed out. Check your connection and retry.");
+    }, LOAD_TIMEOUT_MS);
+
     try {
-      setLoadState("loading");
-      const supabase = createClient();
-      const {
-        data: { user },
-        error: authErr,
-      } = await supabase.auth.getUser();
-      if (authErr) throw authErr;
-      if (!user) throw new Error("Sign in to load diet planner.");
+      const res = await fetch("/api/diet-planner/preferences", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = (await res.json()) as DietPlannerSnapshot & { error?: string };
 
-      const { data, error } = await supabase
-        .from("diet_planner_preferences")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      if (loadRequestId.current !== requestId) return;
+      if (!res.ok) throw new Error(data.error ?? "Failed to load diet planner.");
 
-      if (error) throw error;
-
-      if (data) {
-        setGoal(data.goal as DietGoal);
-        setPreferredFoods((data.preferred_foods ?? []) as PreferredFoodKey[]);
-        setDietFilter(data.diet_filter as DietFilter);
-        setIndianFoodPriority(data.indian_food_priority);
-        setAffordability(data.affordability as Affordability);
-        if (data.generated_plan) {
-          setPlan(data.generated_plan as unknown as DailyDietPlan);
-        }
-      }
+      applySnapshot(data, {
+        setGoal,
+        setPreferredFoods,
+        setDietFilter,
+        setIndianFoodPriority,
+        setAffordability,
+        setPlan,
+        setPlanSource,
+      });
       setLoadState("ready");
     } catch (e) {
+      if (loadRequestId.current !== requestId) return;
       const msg =
         e instanceof Error ? e.message : "Failed to load diet preferences.";
+      setLoadError(msg);
+      setLoadState("error");
       toast({ title: "Diet planner", description: msg, variant: "error" });
-      setLoadState("ready");
+    } finally {
+      window.clearTimeout(timeout);
     }
   }, [toast]);
 
   useEffect(() => {
     let active = true;
-    const fetchPrefs = async () => {
-      await Promise.resolve();
-      if (active) {
-        void loadPreferences();
-      }
-    };
-    void fetchPrefs();
+    const timer = window.setTimeout(() => {
+      if (active) void loadPreferences();
+    }, 0);
     return () => {
       active = false;
+      window.clearTimeout(timer);
+      loadRequestId.current += 1;
     };
   }, [loadPreferences]);
 
@@ -152,6 +184,14 @@ export function DietPlannerSection() {
     return true;
   });
 
+  const savePayload = () => ({
+    goal,
+    preferredFoods,
+    dietFilter,
+    indianFoodPriority,
+    affordability,
+  });
+
   const handleSavePreferences = async () => {
     if (preferredFoods.length === 0) {
       toast({
@@ -164,24 +204,13 @@ export function DietPlannerSection() {
 
     try {
       setIsSaving(true);
-      const supabase = createClient();
-      const {
-        data: { user },
-        error: authErr,
-      } = await supabase.auth.getUser();
-      if (authErr || !user) throw new Error("Please log in again.");
-
-      const { error } = await supabase.from("diet_planner_preferences").upsert({
-        user_id: user.id,
-        goal,
-        preferred_foods: preferredFoods,
-        diet_filter: dietFilter,
-        indian_food_priority: indianFoodPriority,
-        affordability,
-        updated_at: new Date().toISOString(),
+      const res = await fetch("/api/diet-planner/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(savePayload()),
       });
-
-      if (error) throw error;
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Save failed.");
 
       toast({
         title: "Preferences saved",
@@ -194,7 +223,7 @@ export function DietPlannerSection() {
         description:
           e instanceof Error
             ? e.message
-            : "Run supabase_diet_planner_migration.sql if the table is missing.",
+            : "Could not save preferences. Apply the diet planner migration in Supabase.",
         variant: "error",
       });
     } finally {
@@ -217,13 +246,7 @@ export function DietPlannerSection() {
       const res = await fetch("/api/diet-planner/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          goal,
-          preferredFoods,
-          dietFilter,
-          indianFoodPriority,
-          affordability,
-        }),
+        body: JSON.stringify(savePayload()),
       });
 
       const data = (await res.json()) as {
@@ -233,8 +256,9 @@ export function DietPlannerSection() {
       };
 
       if (!res.ok) throw new Error(data.error ?? "Generation failed.");
+      if (!data.plan) throw new Error("No meal plan returned. Please try again.");
 
-      setPlan(data.plan ?? null);
+      setPlan(data.plan);
       setPlanSource(data.source ?? null);
 
       toast({
@@ -255,6 +279,8 @@ export function DietPlannerSection() {
       setIsGenerating(false);
     }
   };
+
+  const isBusy = loadState === "loading" || isSaving || isGenerating;
 
   return (
     <section className="glass rounded-lg border border-white/[0.08] p-5 sm:p-6">
@@ -283,9 +309,10 @@ export function DietPlannerSection() {
           type="button"
           variant="ghost"
           className="h-10 shrink-0 self-start border border-white/10 sm:self-auto"
-          disabled={loadState === "loading"}
+          disabled={isBusy}
           onClick={() => void loadPreferences()}
         >
+          <RotateCcw className="mr-2 h-3.5 w-3.5" />
           Refresh
         </Button>
       </div>
@@ -294,6 +321,24 @@ export function DietPlannerSection() {
         <div className="mt-8 flex flex-col items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-brand-neon" />
           <p className="mt-3 text-xs text-white/35">Loading your preferences…</p>
+        </div>
+      ) : loadState === "error" ? (
+        <div className="mt-8 flex flex-col items-center justify-center rounded-lg border border-red-500/20 bg-red-500/5 py-12 text-center">
+          <AlertCircle className="h-10 w-10 text-red-400/80" />
+          <p className="mt-4 text-base font-black text-white">Could not load planner</p>
+          <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-white/45">
+            {loadError ??
+              "Supabase tables may be missing. Run supabase/migrations/20260520160000_diet_planner_tables.sql in your project."}
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            className="mt-6 h-10 gap-2"
+            onClick={() => void loadPreferences()}
+          >
+            <RotateCcw className="h-4 w-4" />
+            Retry
+          </Button>
         </div>
       ) : (
         <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1.4fr]">
@@ -306,6 +351,7 @@ export function DietPlannerSection() {
                 <button
                   key={g.value}
                   type="button"
+                  disabled={isBusy}
                   onClick={() => setGoal(g.value)}
                   className={cn(
                     "rounded-lg border px-3 py-2.5 text-left transition",
@@ -332,6 +378,7 @@ export function DietPlannerSection() {
                   <button
                     key={food.key}
                     type="button"
+                    disabled={isBusy}
                     onClick={() => toggleFood(food.key)}
                     className={cn(
                       "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs font-semibold transition",
@@ -374,6 +421,7 @@ export function DietPlannerSection() {
                   <button
                     key={value}
                     type="button"
+                    disabled={isBusy}
                     onClick={() => setDietFilter(value)}
                     className={cn(
                       "flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition border",
@@ -391,6 +439,7 @@ export function DietPlannerSection() {
 
             <button
               type="button"
+              disabled={isBusy}
               onClick={() => setIndianFoodPriority((v) => !v)}
               className={cn(
                 "flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-xs font-bold transition",
@@ -420,6 +469,7 @@ export function DietPlannerSection() {
                   <button
                     key={opt.value}
                     type="button"
+                    disabled={isBusy}
                     onClick={() => setAffordability(opt.value)}
                     className={cn(
                       "flex items-center justify-between rounded-lg px-4 py-2.5 text-left text-xs font-bold transition border",
@@ -444,6 +494,7 @@ export function DietPlannerSection() {
                 className="h-10 w-full gap-2"
                 onClick={() => void handleSavePreferences()}
                 isLoading={isSaving}
+                disabled={isGenerating}
               >
                 <Save className="h-4 w-4" />
                 Save Preferences
@@ -453,6 +504,7 @@ export function DietPlannerSection() {
                 className="h-11 w-full bg-white font-extrabold text-black hover:bg-white/90"
                 onClick={() => void handleGeneratePlan()}
                 isLoading={isGenerating}
+                disabled={isSaving}
               >
                 <Sparkles className="mr-2 h-4 w-4" />
                 Generate AI Diet Plan
@@ -464,7 +516,13 @@ export function DietPlannerSection() {
           </div>
 
           <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-4">
-            {plan ? (
+            {isGenerating ? (
+              <div className="flex flex-col items-center justify-center py-16">
+                <Loader2 className="h-10 w-10 animate-spin text-brand-neon" />
+                <p className="mt-4 text-sm font-bold text-white">Building your plan…</p>
+                <p className="mt-1 text-xs text-white/40">This usually takes a few seconds</p>
+              </div>
+            ) : plan ? (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
                   <div>

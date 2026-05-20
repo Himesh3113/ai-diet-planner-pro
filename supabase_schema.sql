@@ -660,9 +660,9 @@ create policy "Users can update their own food images." on public.food_images
 create policy "Users can delete their own food images." on public.food_images
   for delete using (auth.uid() = user_id);
 
--- 19. Diet Planner Preferences (personalized meal plans)
-create table if not exists public.diet_planner_preferences (
-  user_id uuid references public.profiles(id) on delete cascade not null primary key,
+-- 19. Diet Planner (preferences + generated plans)
+create table if not exists public.user_diet_preferences (
+  user_id uuid references auth.users(id) on delete cascade not null primary key,
   goal text not null check (
     goal in ('bulking', 'fat_loss', 'lean_bulk', 'weight_gain', 'maintenance')
   ),
@@ -672,23 +672,48 @@ create table if not exists public.diet_planner_preferences (
   affordability text not null default 'moderate' check (
     affordability in ('budget', 'moderate', 'flexible')
   ),
-  generated_plan jsonb,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
-alter table public.diet_planner_preferences enable row level security;
+create table if not exists public.generated_diet_plans (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  meal_plan jsonb not null,
+  source text not null default 'fallback' check (source in ('ai', 'fallback')),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
 
-drop policy if exists "Users can view their own diet planner preferences." on public.diet_planner_preferences;
-drop policy if exists "Users can insert their own diet planner preferences." on public.diet_planner_preferences;
-drop policy if exists "Users can update their own diet planner preferences." on public.diet_planner_preferences;
+create index if not exists generated_diet_plans_user_created_idx
+  on public.generated_diet_plans (user_id, created_at desc);
 
-create policy "Users can view their own diet planner preferences." on public.diet_planner_preferences
+alter table public.user_diet_preferences enable row level security;
+alter table public.generated_diet_plans enable row level security;
+
+drop policy if exists "Users can view their own diet preferences." on public.user_diet_preferences;
+drop policy if exists "Users can insert their own diet preferences." on public.user_diet_preferences;
+drop policy if exists "Users can update their own diet preferences." on public.user_diet_preferences;
+
+create policy "Users can view their own diet preferences." on public.user_diet_preferences
   for select using (auth.uid() = user_id);
 
-create policy "Users can insert their own diet planner preferences." on public.diet_planner_preferences
+create policy "Users can insert their own diet preferences." on public.user_diet_preferences
   for insert with check (auth.uid() = user_id);
 
-create policy "Users can update their own diet planner preferences." on public.diet_planner_preferences
-  for update using (auth.uid() = user_id);
+create policy "Users can update their own diet preferences." on public.user_diet_preferences
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "Users can view their own generated diet plans." on public.generated_diet_plans;
+drop policy if exists "Users can insert their own generated diet plans." on public.generated_diet_plans;
+drop policy if exists "Users can update their own generated diet plans." on public.generated_diet_plans;
+
+create policy "Users can view their own generated diet plans." on public.generated_diet_plans
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own generated diet plans." on public.generated_diet_plans
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own generated diet plans." on public.generated_diet_plans
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 

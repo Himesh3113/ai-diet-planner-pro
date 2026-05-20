@@ -12,7 +12,11 @@ import {
 import { buildFallbackDietPlan } from "@/lib/diet-planner/fallback-plan";
 import { parseDailyDietPlan } from "@/lib/diet-planner/parse-plan";
 import type { DailyDietPlan } from "@/lib/diet-planner/types";
-import type { Database, Json } from "@/lib/supabase/types";
+import {
+  insertGeneratedDietPlan,
+  upsertUserDietPreferences,
+} from "@/lib/diet-planner/db";
+import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/server";
 
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
@@ -177,32 +181,36 @@ export async function POST(request: NextRequest) {
       source = "fallback";
     }
 
-    const { error: upsertErr } = await supabase.from("diet_planner_preferences").upsert({
-      user_id: user.id,
+    await upsertUserDietPreferences(supabase, {
+      userId: user.id,
       goal,
-      preferred_foods: preferredFoods,
-      diet_filter: dietFilter,
-      indian_food_priority: indianFoodPriority,
+      preferredFoods,
+      dietFilter,
+      indianFoodPriority,
       affordability,
-      generated_plan: plan as unknown as Json,
-      updated_at: new Date().toISOString(),
     });
 
-    if (upsertErr) {
-      return Response.json(
-        { error: "Plan generated but failed to save. Run the diet planner migration in Supabase." },
-        { status: 500 },
-      );
-    }
+    await insertGeneratedDietPlan(supabase, {
+      userId: user.id,
+      plan,
+      source,
+    });
 
     return Response.json({ plan, source });
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to generate diet plan.";
+    const isMissingTable =
+      message.includes("user_diet_preferences") ||
+      message.includes("generated_diet_plans") ||
+      message.includes("schema cache") ||
+      message.includes("does not exist");
+
     return Response.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to generate diet plan.",
+        error: isMissingTable
+          ? "Diet planner tables are missing. Apply supabase/migrations/20260520160000_diet_planner_tables.sql in Supabase."
+          : message,
       },
       { status: 500 },
     );

@@ -723,7 +723,7 @@ export type Database = {
         ];
       };
 
-      diet_planner_preferences: {
+      user_diet_preferences: {
         Row: {
           user_id: string;
           goal: "bulking" | "fat_loss" | "lean_bulk" | "weight_gain" | "maintenance";
@@ -731,7 +731,6 @@ export type Database = {
           diet_filter: "veg" | "non_veg";
           indian_food_priority: boolean;
           affordability: "budget" | "moderate" | "flexible";
-          generated_plan: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -742,7 +741,6 @@ export type Database = {
           diet_filter?: "veg" | "non_veg";
           indian_food_priority?: boolean;
           affordability?: "budget" | "moderate" | "flexible";
-          generated_plan?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -753,16 +751,50 @@ export type Database = {
           diet_filter?: "veg" | "non_veg";
           indian_food_priority?: boolean;
           affordability?: "budget" | "moderate" | "flexible";
-          generated_plan?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
         Relationships: [
           {
             columns: ["user_id"];
-            foreignKeyName: "diet_planner_preferences_user_id_fkey";
+            foreignKeyName: "user_diet_preferences_user_id_fkey";
             referencedColumns: ["id"];
-            referencedRelation: "profiles";
+            referencedRelation: "users";
+          },
+        ];
+      };
+
+      generated_diet_plans: {
+        Row: {
+          id: string;
+          user_id: string;
+          meal_plan: Json;
+          source: "ai" | "fallback";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          meal_plan: Json;
+          source?: "ai" | "fallback";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          meal_plan?: Json;
+          source?: "ai" | "fallback";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "generated_diet_plans_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "users";
           },
         ];
       };
