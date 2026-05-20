@@ -8,11 +8,13 @@ import {
   Bell,
   ChefHat,
   CalendarDays,
-  ClipboardList,
+  Dumbbell,
   LayoutDashboard,
   LogOut,
   Menu,
+  Moon,
   Settings,
+  TrendingUp,
   User,
   X,
 } from "lucide-react";
@@ -33,12 +35,27 @@ export type DashboardUser = {
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/dashboard/diet-planner", icon: ChefHat, label: "Diet Planner" },
-  { href: "/onboarding", icon: ClipboardList, label: "Onboarding" },
-  { href: "/profile", icon: User, label: "Profile" },
-  { href: "#activity", icon: Activity, label: "Activity" },
-  { href: "#schedule", icon: CalendarDays, label: "Schedule" },
-  { href: "#settings", icon: Settings, label: "Settings" },
-];
+  { href: "/dashboard/activity", icon: Activity, label: "Activity" },
+  { href: "/dashboard/workout", icon: Dumbbell, label: "Workout" },
+  { href: "/dashboard/sleep", icon: Moon, label: "Sleep" },
+  { href: "/dashboard/analytics", icon: TrendingUp, label: "Analytics" },
+  { href: "/dashboard/profile", icon: User, label: "Profile" },
+  { href: "/dashboard/schedule", icon: CalendarDays, label: "Schedule" },
+  { href: "/dashboard/settings", icon: Settings, label: "Settings" },
+] as const;
+
+const PAGE_TITLES: Record<string, string> = {
+  "/dashboard": "Overview",
+  "/dashboard/diet-planner": "Diet Planner",
+  "/dashboard/activity": "Activity",
+  "/dashboard/workout": "Workout Planner",
+  "/dashboard/sleep": "Sleep & Recovery",
+  "/dashboard/analytics": "Analytics Hub",
+  "/dashboard/profile": "Profile Settings",
+  "/dashboard/settings": "Settings",
+  "/dashboard/schedule": "Schedule",
+  "/dashboard/nutrition": "Nutrition",
+};
 
 function getInitials(user: DashboardUser) {
   const label = user.fullName || user.email;
@@ -77,7 +94,10 @@ function SidebarContent({
 
       <nav className="flex-1 space-y-1 px-3">
         {navItems.map(({ href, icon: Icon, label }) => {
-          const active = href.startsWith("/") && pathname === href;
+          const active =
+            href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname === href || pathname.startsWith(`${href}/`);
 
           return (
             <Link
@@ -88,7 +108,7 @@ function SidebarContent({
                   : "hover:bg-white/[0.06] hover:text-white",
               )}
               href={href}
-              key={label}
+              key={href}
               onClick={onNavigate}
             >
               <Icon className="h-4 w-4" />
@@ -132,6 +152,8 @@ export function DashboardShell({
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
+
+  const pageTitle = PAGE_TITLES[pathname] ?? "Dashboard";
 
   async function handleLogout() {
     setIsSigningOut(true);
@@ -216,9 +238,7 @@ export function DashboardShell({
                   Phase 2
                 </p>
                 <h1 className="text-lg font-black tracking-tight text-white sm:text-xl">
-                  {pathname === "/dashboard/diet-planner"
-                    ? "Diet Planner"
-                    : "Profile Dashboard"}
+                  {pageTitle}
                 </h1>
               </div>
             </div>

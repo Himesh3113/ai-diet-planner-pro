@@ -267,28 +267,34 @@ export type Database = {
       };
       hydration_logs: {
         Row: {
+          bmi: number | null;
           created_at: string;
           id: string;
           logged_on: string;
           updated_at: string;
           user_id: string;
           water_ml: number;
+          weight_kg: number | null;
         };
         Insert: {
+          bmi?: number | null;
           created_at?: string;
           id?: string;
           logged_on?: string;
           updated_at?: string;
           user_id: string;
           water_ml?: number;
+          weight_kg?: number | null;
         };
         Update: {
+          bmi?: number | null;
           created_at?: string;
           id?: string;
           logged_on?: string;
           updated_at?: string;
           user_id?: string;
           water_ml?: number;
+          weight_kg?: number | null;
         };
         Relationships: [
           {
@@ -559,6 +565,158 @@ export type Database = {
           {
             columns: ["user_id"];
             foreignKeyName: "user_metrics_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
+
+      workout_plans: {
+        Row: {
+          user_id: string;
+          difficulty: "beginner" | "intermediate" | "advanced";
+          mode: "home" | "gym";
+          weekly_schedule: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          difficulty: "beginner" | "intermediate" | "advanced";
+          mode: "home" | "gym";
+          weekly_schedule: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          difficulty?: "beginner" | "intermediate" | "advanced";
+          mode?: "home" | "gym";
+          weekly_schedule?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "workout_plans_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
+
+      sleep_logs: {
+        Row: {
+          id: string;
+          user_id: string;
+          logged_on: string;
+          duration_hours: number;
+          quality_score: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          logged_on?: string;
+          duration_hours: number;
+          quality_score: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          logged_on?: string;
+          duration_hours?: number;
+          quality_score?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "sleep_logs_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
+
+      workout_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          logged_on: string;
+          workout_name: string;
+          duration_minutes: number;
+          calories_burned: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          logged_on?: string;
+          workout_name: string;
+          duration_minutes: number;
+          calories_burned?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          logged_on?: string;
+          workout_name?: string;
+          duration_minutes?: number;
+          calories_burned?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "workout_sessions_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
+
+      ai_chat_history: {
+        Row: {
+          id: string;
+          user_id: string;
+          role: "user" | "assistant";
+          content: string;
+          model: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          role: "user" | "assistant";
+          content: string;
+          model?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          role?: "user" | "assistant";
+          content?: string;
+          model?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "ai_chat_history_user_id_fkey";
             referencedColumns: ["id"];
             referencedRelation: "profiles";
           },
