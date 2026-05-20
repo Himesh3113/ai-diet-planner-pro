@@ -4,13 +4,14 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Apple, Flame, Loader2, Plus, Trash2, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 import { buildNutritionTargets } from "@/lib/meal-recommendations/nutrition-from-metrics";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/ui/toast";
 
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
-type FoodEntry = Database["public"]["Tables"]["food_entries"]["Row"];
+type FoodEntry = Database["public"]["Tables"]["food_logs"]["Row"];
 type MealType = FoodEntry["meal_type"];
 
 type Props = {
@@ -219,7 +220,7 @@ export function FoodLogSection({ metrics }: Props) {
 
       // Load food entries with graceful error handling
       const { data, error: logErr } = await supabase
-        .from("food_entries")
+        .from("food_logs")
         .select("*")
         .eq("user_id", user.id)
         .eq("logged_on", logDate);
@@ -227,10 +228,17 @@ export function FoodLogSection({ metrics }: Props) {
       setEntries(data ?? []);
       setLoadState("ready");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Food log could not load.");
+      console.error("Food log load database error", e);
+      const message = e instanceof Error ? e.message : "Food log could not load.";
+      setError(message);
+      toast({
+        title: "Food log unavailable",
+        description: "Food logs could not load. Check the database migration and RLS policies.",
+        variant: "error",
+      });
       setLoadState("error");
     }
-  }, [logDate]);
+  }, [logDate, toast]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -272,7 +280,7 @@ export function FoodLogSection({ metrics }: Props) {
       if (!user) throw new Error("Sign in again to add food entries.");
 
       const { data, error: insertErr } = await supabase
-        .from("food_entries")
+        .from("food_logs")
         .insert({
           user_id: user.id,
           meal_type: mealType,
@@ -286,14 +294,28 @@ export function FoodLogSection({ metrics }: Props) {
         .single();
 
       if (insertErr) throw insertErr;
+      if (!data) throw new Error("Food entry was saved but no row was returned.");
       setEntries((current) => [data, ...current]);
       setFoodName("");
       setQuantity("");
       setCalories("");
       setProteinG("");
       setLoadState("ready");
+      window.dispatchEvent(new CustomEvent("food-log:changed"));
+      toast({
+        title: "Food added",
+        description: `${name} is saved for today.`,
+        variant: "success",
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Food entry could not be saved.");
+      console.error("Food log insert database error", e);
+      const message = e instanceof Error ? e.message : "Food entry could not be saved.";
+      setError(message);
+      toast({
+        title: "Could not add food",
+        description: "The entry was not saved. Check food_logs insert permissions.",
+        variant: "error",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -305,14 +327,27 @@ export function FoodLogSection({ metrics }: Props) {
       setError(null);
       const supabase = createClient();
       const { error: deleteErr } = await supabase
-        .from("food_entries")
+        .from("food_logs")
         .delete()
         .eq("id", entryId);
 
       if (deleteErr) throw deleteErr;
       setEntries((current) => current.filter((entry) => entry.id !== entryId));
+      window.dispatchEvent(new CustomEvent("food-log:changed"));
+      toast({
+        title: "Food removed",
+        description: "Today's totals were updated.",
+        variant: "success",
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Food entry could not be removed.");
+      console.error("Food log delete database error", e);
+      const message = e instanceof Error ? e.message : "Food entry could not be removed.";
+      setError(message);
+      toast({
+        title: "Could not remove food",
+        description: "The entry was not deleted. Check food_logs delete permissions.",
+        variant: "error",
+      });
     } finally {
       setDeletingId(null);
     }
@@ -453,7 +488,7 @@ export function FoodLogSection({ metrics }: Props) {
           <div className="rounded-lg border border-dashed border-white/[0.14] bg-white/[0.02] px-5 py-10 text-center">
             <p className="text-sm font-black text-white">Food log unavailable</p>
             <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-white/45">
-              Check the Supabase food_entries table and try refreshing.
+              Check the Supabase food_logs table and try refreshing.
             </p>
           </div>
         ) : entries.length === 0 ? (

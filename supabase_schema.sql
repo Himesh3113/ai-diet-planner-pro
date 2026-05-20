@@ -137,10 +137,42 @@ create table if not exists public.health_condition_notes (
   migraine text,
   knee_pain text,
   hair_fall text,
+  weight_loss text,
+  weight_gain text,
+  pcos text,
+  diabetes text,
+  high_bp text,
+  thyroid text,
+  low_energy text,
+  poor_sleep text,
+  stress_anxiety text,
+  gym_muscle_gain text,
+  digestion_bloating text,
+  vitamin_deficiency text,
 
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+do $$
+begin
+  alter table public.health_condition_notes add column if not exists acne text;
+  alter table public.health_condition_notes add column if not exists migraine text;
+  alter table public.health_condition_notes add column if not exists knee_pain text;
+  alter table public.health_condition_notes add column if not exists hair_fall text;
+  alter table public.health_condition_notes add column if not exists weight_loss text;
+  alter table public.health_condition_notes add column if not exists weight_gain text;
+  alter table public.health_condition_notes add column if not exists pcos text;
+  alter table public.health_condition_notes add column if not exists diabetes text;
+  alter table public.health_condition_notes add column if not exists high_bp text;
+  alter table public.health_condition_notes add column if not exists thyroid text;
+  alter table public.health_condition_notes add column if not exists low_energy text;
+  alter table public.health_condition_notes add column if not exists poor_sleep text;
+  alter table public.health_condition_notes add column if not exists stress_anxiety text;
+  alter table public.health_condition_notes add column if not exists gym_muscle_gain text;
+  alter table public.health_condition_notes add column if not exists digestion_bloating text;
+  alter table public.health_condition_notes add column if not exists vitamin_deficiency text;
+end $$;
 
 -- updated_at trigger
 create or replace function public.set_updated_at()
@@ -179,7 +211,114 @@ create policy "Users can insert their own health condition notes." on public.hea
 create policy "Users can update their own health condition notes." on public.health_condition_notes
   for update using (auth.uid() = user_id);
 
--- 9. Food Entries (Daily food logging)
+-- 9. Food Logs (Daily food logging)
+create table if not exists public.food_logs (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  meal_type text not null check (meal_type in ('breakfast', 'lunch', 'dinner', 'snacks')),
+  food_name text not null,
+  quantity text not null default '1 serving',
+  calories integer not null check (calories >= 0),
+  protein_g numeric not null default 0 check (protein_g >= 0),
+  logged_on date not null default current_date,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'food_logs'
+      and column_name = 'quantity'
+  ) then
+    alter table public.food_logs add column quantity text not null default '1 serving';
+  end if;
+end $$;
+
+do $$
+begin
+  if to_regclass('public.food_entries') is not null then
+    if exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'food_entries'
+        and column_name = 'quantity'
+    ) then
+      execute '
+        insert into public.food_logs (
+          id,
+          user_id,
+          meal_type,
+          food_name,
+          quantity,
+          calories,
+          protein_g,
+          logged_on,
+          created_at
+        )
+        select
+          id,
+          user_id,
+          meal_type,
+          food_name,
+          quantity,
+          calories,
+          protein_g,
+          logged_on,
+          created_at
+        from public.food_entries
+        on conflict (id) do nothing
+      ';
+    else
+      execute '
+      insert into public.food_logs (
+        id,
+        user_id,
+        meal_type,
+        food_name,
+        quantity,
+        calories,
+        protein_g,
+        logged_on,
+        created_at
+      )
+      select
+        id,
+        user_id,
+        meal_type,
+        food_name,
+        ''1 serving'',
+        calories,
+        protein_g,
+        logged_on,
+        created_at
+      from public.food_entries
+      on conflict (id) do nothing
+    ';
+    end if;
+  end if;
+end $$;
+
+create index if not exists food_logs_user_logged_on_idx
+  on public.food_logs (user_id, logged_on, created_at desc);
+
+alter table public.food_logs enable row level security;
+
+drop policy if exists "Users can view their own food logs." on public.food_logs;
+drop policy if exists "Users can insert their own food logs." on public.food_logs;
+drop policy if exists "Users can delete their own food logs." on public.food_logs;
+
+create policy "Users can view their own food logs." on public.food_logs
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own food logs." on public.food_logs
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can delete their own food logs." on public.food_logs
+  for delete using (auth.uid() = user_id);
+
+-- Legacy table kept for older deployments that still read food_entries.
 create table if not exists public.food_entries (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references public.profiles(id) on delete cascade not null,

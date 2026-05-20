@@ -19,7 +19,7 @@ const WELCOME_MESSAGE: ChatMessage = {
   id: "welcome",
   role: "assistant",
   content:
-    "Hi, I am your AI nutrition assistant. Ask about meals, protein, hydration, calories, or wellness patterns. I use your dashboard data when available, but I cannot diagnose or replace medical care.",
+    "Ask me for a concise meal fix, protein gap, hydration plan, or condition-aware food swap. I will use your saved profile, food logs, and health notes when available.",
 };
 
 function toChatMessage(row: StoredMessage): ChatMessage {
@@ -36,6 +36,17 @@ function errorMessageFor(status: number, fallback: string) {
   if (status === 429) return fallback || "Rate limit reached. Please try again later.";
   if (status >= 500) return "The AI provider is temporarily unavailable. Try again in a moment.";
   return fallback || "The assistant could not respond. Please try again.";
+}
+
+function optionalMessagesUnavailable(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybeError = error as { code?: string; message?: string };
+  return (
+    maybeError.code === "42P01" ||
+    maybeError.code === "PGRST205" ||
+    (typeof maybeError.message === "string" &&
+      maybeError.message.toLowerCase().includes("ai_assistant_messages"))
+  );
 }
 
 export function AIAssistantWidget() {
@@ -71,7 +82,14 @@ export function AIAssistantWidget() {
           .order("created_at", { ascending: true })
           .limit(40);
 
-        if (msgErr) throw msgErr;
+        if (msgErr) {
+          if (optionalMessagesUnavailable(msgErr)) {
+            setMessages([WELCOME_MESSAGE]);
+            setLoadState("ready");
+            return;
+          }
+          throw msgErr;
+        }
         const saved = (data ?? []).map(toChatMessage);
         setMessages(saved.length > 0 ? saved : [WELCOME_MESSAGE]);
         setLoadState("ready");

@@ -3,8 +3,11 @@
 import { Activity, Droplets, Flame, RefreshCcw } from "lucide-react";
 import type { Database } from "@/lib/supabase/types";
 import { useEffect, useMemo, useState } from "react";
+import { useToast } from "@/components/ui/toast";
+import { createClient } from "@/utils/supabase/client";
 
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
+type HydrationLog = Database["public"]["Tables"]["hydration_logs"]["Row"];
 
 type Props = {
   metrics: MetricsRow | null;
@@ -213,12 +216,11 @@ function MetricsEmptyState({ hasMetricsRow }: { hasMetricsRow: boolean }) {
 }
 
 export function NutritionOverviewCards({ metrics, isLoading = false }: Props) {
+  const { toast } = useToast();
   const [hydrationMl, setHydrationMl] = useState(0);
-
-  const hydrationStorageKey = useMemo(() => {
-    const userId = metrics?.user_id ?? "unknown";
-    return `hydration:${userId}:${todayKey()}`;
-  }, [metrics?.user_id]);
+  const [hydrationLog, setHydrationLog] = useState<HydrationLog | null>(null);
+  const [hydrationBusy, setHydrationBusy] = useState(false);
+  const [hydrationError, setHydrationError] = useState<string | null>(null);
 
   const targets = useMemo(() => {
     const heightCm = metrics?.height ?? null;
@@ -255,27 +257,96 @@ export function NutritionOverviewCards({ metrics, isLoading = false }: Props) {
   }, [metrics]);
 
   useEffect(() => {
-    let next = 0;
-    try {
-      const raw = window.localStorage.getItem(hydrationStorageKey);
-      const parsed = raw ? Number(raw) : 0;
-      next = Number.isFinite(parsed) ? parsed : 0;
-    } catch {
-      // ignore
+    let cancelled = false;
+
+    async function loadHydration() {
+      try {
+        setHydrationError(null);
+        const supabase = createClient();
+        const {
+          data: { user },
+          error: authErr,
+        } = await supabase.auth.getUser();
+        if (authErr) throw authErr;
+        if (!user) throw new Error("Sign in again to load hydration.");
+
+        const { data, error } = await supabase
+          .from("hydration_logs")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("logged_on", todayKey())
+          .maybeSingle();
+
+        if (error) throw error;
+        if (cancelled) return;
+        setHydrationLog(data ?? null);
+        setHydrationMl(data?.water_ml ?? 0);
+      } catch (e) {
+        console.error("Hydration load database error", e);
+        if (cancelled) return;
+        const message = e instanceof Error ? e.message : "Hydration could not load.";
+        setHydrationError(message);
+        toast({
+          title: "Hydration unavailable",
+          description: "Water tracking could not load. Check database setup.",
+          variant: "error",
+        });
+      }
     }
 
-    setTimeout(() => {
-      setHydrationMl(next);
-    }, 0);
-  }, [hydrationStorageKey]);
+    void loadHydration();
+    return () => {
+      cancelled = true;
+    };
+  }, [toast]);
 
-  useEffect(() => {
+  async function saveHydration(nextWaterMl: number) {
     try {
-      window.localStorage.setItem(hydrationStorageKey, String(hydrationMl));
-    } catch {
-      // ignore
+      setHydrationBusy(true);
+      setHydrationError(null);
+      const supabase = createClient();
+      const {
+        data: { user },
+        error: authErr,
+      } = await supabase.auth.getUser();
+      if (authErr) throw authErr;
+      if (!user) throw new Error("Sign in again to save hydration.");
+
+      const { data, error } = await supabase
+        .from("hydration_logs")
+        .upsert(
+          {
+            user_id: user.id,
+            logged_on: todayKey(),
+            water_ml: Math.max(0, nextWaterMl),
+          },
+          { onConflict: "user_id,logged_on" },
+        )
+        .select("*")
+        .single();
+
+      if (error) throw error;
+      setHydrationLog(data);
+      setHydrationMl(data.water_ml);
+      window.dispatchEvent(new CustomEvent("hydration-log:changed"));
+      toast({
+        title: "Hydration saved",
+        description: `${data.water_ml} ml logged for today.`,
+        variant: "success",
+      });
+    } catch (e) {
+      console.error("Hydration save database error", e);
+      const message = e instanceof Error ? e.message : "Hydration could not be saved.";
+      setHydrationError(message);
+      toast({
+        title: "Could not save hydration",
+        description: "Your water log was not saved. Check database permissions.",
+        variant: "error",
+      });
+    } finally {
+      setHydrationBusy(false);
     }
-  }, [hydrationMl, hydrationStorageKey]);
+  }
 
   const hydrationPct = useMemo(() => {
     if (!targets.waterMl) return 0;
@@ -409,6 +480,15 @@ export function NutritionOverviewCards({ metrics, isLoading = false }: Props) {
                 </span>
               ) : null}
             </p>
+            {hydrationError ? (
+              <p className="mt-2 text-xs font-semibold text-red-200">
+                Water tracking is unavailable.
+              </p>
+            ) : hydrationLog ? (
+              <p className="mt-2 text-[11px] text-white/28">
+                Saved in Supabase today.
+              </p>
+            ) : null}
 
             <div
               className="mt-3 h-2 rounded-full bg-white/[0.06]"
@@ -428,24 +508,24 @@ export function NutritionOverviewCards({ metrics, isLoading = false }: Props) {
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={!targets.waterMl}
-                onClick={() => setHydrationMl((v) => v + 250)}
+                disabled={!targets.waterMl || hydrationBusy}
+                onClick={() => saveHydration(hydrationMl + 250)}
                 className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/70 hover:bg-white/[0.07] disabled:opacity-50"
               >
                 +250 ml
               </button>
               <button
                 type="button"
-                disabled={!targets.waterMl}
-                onClick={() => setHydrationMl((v) => Math.max(0, v - 250))}
+                disabled={!targets.waterMl || hydrationBusy}
+                onClick={() => saveHydration(Math.max(0, hydrationMl - 250))}
                 className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/70 hover:bg-white/[0.07] disabled:opacity-50"
               >
                 −250 ml
               </button>
               <button
                 type="button"
-                disabled={!targets.waterMl}
-                onClick={() => setHydrationMl(0)}
+                disabled={!targets.waterMl || hydrationBusy}
+                onClick={() => saveHydration(0)}
                 className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/70 hover:bg-white/[0.07] disabled:opacity-50"
               >
                 <RefreshCcw className="h-3.5 w-3.5" /> Reset
@@ -469,10 +549,10 @@ export function NutritionOverviewCards({ metrics, isLoading = false }: Props) {
             </div>
 
             <p className="mt-3 text-sm font-bold text-white/60">
-              {canCompute ? "Set by AI (soon)" : "—"}
+              {canCompute ? "Matched to your goal" : "—"}
             </p>
             <p className="mt-2 text-xs text-white/35">
-              Targets for calories, protein, and hydration are enabled.
+              Use higher-fiber carbs and pair them with protein in logged meals.
             </p>
           </div>
         </div>

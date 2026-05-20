@@ -17,22 +17,17 @@ import { Button } from "@/components/ui/button";
 import { buildNutritionTargets } from "@/lib/meal-recommendations/nutrition-from-metrics";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/client";
-import {
-  CHART_AXIS,
-  CHART_GRID,
-  CHART_TOOLTIP,
-  MUTED_LINE,
-  NEON,
-} from "./analytics/chart-styles";
+import { CHART_AXIS, CHART_GRID, CHART_TOOLTIP, MUTED_LINE, NEON } from "./analytics/chart-styles";
 
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
-type FoodEntry = Database["public"]["Tables"]["food_entries"]["Row"];
-type ProgressLog = Database["public"]["Tables"]["daily_progress_logs"]["Row"];
-type AnalyticsMode = 7 | 30;
+type FoodLog = Database["public"]["Tables"]["food_logs"]["Row"];
+type HydrationLog = Database["public"]["Tables"]["hydration_logs"]["Row"];
 
 type Props = {
   metrics: MetricsRow | null;
 };
+
+type AnalyticsMode = 7 | 30;
 
 type DayRow = {
   dateKey: string;
@@ -40,120 +35,96 @@ type DayRow = {
   calories: number;
   proteinG: number;
   waterMl: number;
-  weightKg: number | null;
-  bmi: number | null;
   calorieTarget: number | null;
   proteinTargetG: number | null;
   waterTargetMl: number | null;
 };
 
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function dateKey(d: Date) {
+function todayKey() {
+  const d = new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function parseDateKey(key: string) {
+function daysAgoKey(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function labelForDate(key: string) {
   const [year, month, day] = key.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function dayKeys(count: number, now = new Date()) {
-  const today = startOfDay(now);
-  const out: string[] = [];
-  for (let i = count - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    out.push(dateKey(d));
-  }
-  return out;
-}
-
-function labelForDate(key: string, mode: AnalyticsMode) {
-  const d = parseDateKey(key);
-  if (mode === 7) {
-    return d.toLocaleDateString(undefined, { weekday: "short" });
-  }
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function round1(n: number) {
   return Math.round(n * 10) / 10;
 }
 
-function bmiFromMetrics(metrics: MetricsRow | null) {
-  const weight = metrics?.weight ?? null;
-  const height = metrics?.height ?? null;
-  if (weight == null || height == null || weight <= 0 || height <= 0) return null;
-  const heightM = height / 100;
-  return weight / (heightM * heightM);
-}
-
-function aggregateFood(entries: FoodEntry[]) {
-  const byDate = new Map<string, { calories: number; proteinG: number }>();
-  for (const entry of entries) {
-    const current = byDate.get(entry.logged_on) ?? { calories: 0, proteinG: 0 };
-    current.calories += entry.calories;
-    current.proteinG += Number(entry.protein_g);
-    byDate.set(entry.logged_on, current);
-  }
-  return byDate;
-}
-
 function buildRows(args: {
-  mode: AnalyticsMode;
+  foodLogs: FoodLog[];
+  hydrationLogs: HydrationLog[];
   metrics: MetricsRow | null;
-  foodEntries: FoodEntry[];
-  progressLogs: ProgressLog[];
 }) {
   const targets = buildNutritionTargets(args.metrics);
-  const foodByDate = aggregateFood(args.foodEntries);
-  const progressByDate = new Map(args.progressLogs.map((log) => [log.logged_on, log]));
+  const byDate = new Map<string, { calories: number; proteinG: number; waterMl: number }>();
 
-  return dayKeys(args.mode).map((key): DayRow => {
-    const food = foodByDate.get(key);
-    const progress = progressByDate.get(key);
-    return {
-      dateKey: key,
-      label: labelForDate(key, args.mode),
-      calories: food?.calories ?? 0,
-      proteinG: food?.proteinG ?? 0,
-      waterMl: progress?.water_ml ?? 0,
-      weightKg: progress?.weight_kg ?? null,
-      bmi: progress?.bmi ?? null,
+  for (const log of args.foodLogs) {
+    const row = byDate.get(log.logged_on) ?? { calories: 0, proteinG: 0, waterMl: 0 };
+    row.calories += log.calories;
+    row.proteinG += Number(log.protein_g);
+    byDate.set(log.logged_on, row);
+  }
+
+  for (const log of args.hydrationLogs) {
+    const row = byDate.get(log.logged_on) ?? { calories: 0, proteinG: 0, waterMl: 0 };
+    row.waterMl = log.water_ml;
+    byDate.set(log.logged_on, row);
+  }
+
+  return [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([dateKey, row]): DayRow => ({
+      dateKey,
+      label: labelForDate(dateKey),
+      calories: row.calories,
+      proteinG: round1(row.proteinG),
+      waterMl: row.waterMl,
       calorieTarget: targets.dailyCalories,
       proteinTargetG: targets.dailyProteinG,
       waterTargetMl: targets.hydrationMl,
-    };
-  });
+    }));
 }
 
 function adherencePercent(rows: DayRow[]) {
-  const trackable = rows.filter((row) => row.calorieTarget || row.proteinTargetG || row.waterTargetMl);
-  if (trackable.length === 0) return null;
+  const meaningful = rows.filter(
+    (row) => row.calories > 0 || row.proteinG > 0 || row.waterMl > 0,
+  );
+  if (meaningful.length === 0) return null;
 
-  const scores = trackable.map((row) => {
+  const scores = meaningful.map((row) => {
     let checks = 0;
     let passed = 0;
 
-    if (row.calorieTarget) {
+    if (row.calorieTarget && row.calories > 0) {
       checks += 1;
-      const lower = row.calorieTarget * 0.8;
-      const upper = row.calorieTarget * 1.1;
-      if (row.calories >= lower && row.calories <= upper) passed += 1;
+      if (row.calories >= row.calorieTarget * 0.8 && row.calories <= row.calorieTarget * 1.12) {
+        passed += 1;
+      }
     }
-    if (row.proteinTargetG) {
+    if (row.proteinTargetG && row.proteinG > 0) {
       checks += 1;
       if (row.proteinG >= row.proteinTargetG * 0.7) passed += 1;
     }
-    if (row.waterTargetMl) {
+    if (row.waterTargetMl && row.waterMl > 0) {
       checks += 1;
       if (row.waterMl >= row.waterTargetMl * 0.7) passed += 1;
     }
@@ -162,26 +133,6 @@ function adherencePercent(rows: DayRow[]) {
   });
 
   return Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 100);
-}
-
-function ChartCard({
-  title,
-  hint,
-  children,
-}: {
-  title: string;
-  hint: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-4">
-      <div className="mb-2">
-        <p className="text-xs font-black text-white">{title}</p>
-        <p className="mt-0.5 text-[10px] text-white/35">{hint}</p>
-      </div>
-      {children}
-    </div>
-  );
 }
 
 function SummaryCard({
@@ -213,6 +164,26 @@ function SummaryCard({
   );
 }
 
+function ChartCard({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-4">
+      <div className="mb-2">
+        <p className="text-xs font-black text-white">{title}</p>
+        <p className="mt-0.5 text-[10px] text-white/35">{hint}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function LoadingState() {
   return (
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -231,18 +202,12 @@ function LoadingState() {
 
 export function ProgressAnalyticsSection({ metrics }: Props) {
   const [mode, setMode] = useState<AnalyticsMode>(7);
-  const [foodEntries, setFoodEntries] = useState<FoodEntry[]>([]);
-  const [progressLogs, setProgressLogs] = useState<ProgressLog[]>([]);
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
-    "loading",
-  );
+  const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
+  const [hydrationLogs, setHydrationLogs] = useState<HydrationLog[]>([]);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
-  const [waterBusy, setWaterBusy] = useState(false);
 
-  const today = useMemo(() => dateKey(new Date()), []);
   const targets = useMemo(() => buildNutritionTargets(metrics), [metrics]);
-  const currentBmi = useMemo(() => bmiFromMetrics(metrics), [metrics]);
-  const currentWeight = metrics?.weight ?? null;
 
   const loadAnalytics = useCallback(async () => {
     try {
@@ -256,20 +221,19 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
       if (authErr) throw authErr;
       if (!user) throw new Error("Sign in again to load progress analytics.");
 
-      const keys = dayKeys(30);
-      const start = keys[0];
-      const end = keys[keys.length - 1];
-
-      const [{ data: food, error: foodErr }, { data: progress, error: progressErr }] =
+      const start = daysAgoKey(mode - 1);
+      const end = todayKey();
+      const [{ data: food, error: foodErr }, { data: hydration, error: hydrationErr }] =
         await Promise.all([
           supabase
-            .from("food_entries")
+            .from("food_logs")
             .select("*")
             .eq("user_id", user.id)
             .gte("logged_on", start)
-            .lte("logged_on", end),
+            .lte("logged_on", end)
+            .order("logged_on", { ascending: true }),
           supabase
-            .from("daily_progress_logs")
+            .from("hydration_logs")
             .select("*")
             .eq("user_id", user.id)
             .gte("logged_on", start)
@@ -278,38 +242,16 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
         ]);
 
       if (foodErr) throw foodErr;
-      if (progressErr) throw progressErr;
-
-      const todayLog = (progress ?? []).find((log) => log.logged_on === today);
-      const snapshot = {
-        user_id: user.id,
-        logged_on: today,
-        weight_kg: currentWeight,
-        bmi: currentBmi != null ? round1(currentBmi) : null,
-        water_ml: todayLog?.water_ml ?? 0,
-      };
-
-      const { data: savedToday, error: snapshotErr } = await supabase
-        .from("daily_progress_logs")
-        .upsert(snapshot, { onConflict: "user_id,logged_on" })
-        .select("*")
-        .single();
-
-      if (snapshotErr) throw snapshotErr;
-
-      const mergedProgress = [
-        ...(progress ?? []).filter((log) => log.logged_on !== today),
-        savedToday,
-      ].sort((a, b) => a.logged_on.localeCompare(b.logged_on));
-
-      setFoodEntries(food ?? []);
-      setProgressLogs(mergedProgress);
+      if (hydrationErr) throw hydrationErr;
+      setFoodLogs(food ?? []);
+      setHydrationLogs(hydration ?? []);
       setLoadState("ready");
     } catch (e) {
+      console.error("Progress analytics database error", e);
       setError(e instanceof Error ? e.message : "Progress analytics could not load.");
       setLoadState("error");
     }
-  }, [currentBmi, currentWeight, today]);
+  }, [mode]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -319,82 +261,26 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
     return () => window.clearTimeout(timer);
   }, [loadAnalytics]);
 
+  useEffect(() => {
+    const handleChanged = () => {
+      void loadAnalytics();
+    };
+
+    window.addEventListener("food-log:changed", handleChanged);
+    window.addEventListener("hydration-log:changed", handleChanged);
+    return () => {
+      window.removeEventListener("food-log:changed", handleChanged);
+      window.removeEventListener("hydration-log:changed", handleChanged);
+    };
+  }, [loadAnalytics]);
+
   const rows = useMemo(
-    () => buildRows({ mode, metrics, foodEntries, progressLogs }),
-    [foodEntries, metrics, mode, progressLogs],
+    () => buildRows({ foodLogs, hydrationLogs, metrics }),
+    [foodLogs, hydrationLogs, metrics],
   );
-
-  const todayRow = rows[rows.length - 1];
+  const todayRow = rows.find((row) => row.dateKey === todayKey()) ?? rows[rows.length - 1];
   const adherence = useMemo(() => adherencePercent(rows), [rows]);
-  const populatedDays = useMemo(
-    () =>
-      rows.filter(
-        (row) =>
-          row.calories > 0 ||
-          row.proteinG > 0 ||
-          row.waterMl > 0 ||
-          row.weightKg != null ||
-          row.bmi != null,
-      ).length,
-    [rows],
-  );
-
-  const chartRows = useMemo(
-    () =>
-      rows.map((row) => ({
-        ...row,
-        weightKg: row.weightKg != null ? round1(row.weightKg) : null,
-        bmi: row.bmi != null ? round1(row.bmi) : null,
-        proteinG: round1(row.proteinG),
-      })),
-    [rows],
-  );
-
-  const saveWater = useCallback(
-    async (nextWaterMl: number) => {
-      try {
-        setWaterBusy(true);
-        setError(null);
-        const supabase = createClient();
-        const {
-          data: { user },
-          error: authErr,
-        } = await supabase.auth.getUser();
-        if (authErr) throw authErr;
-        if (!user) throw new Error("Sign in again to update water intake.");
-
-        const { data, error: saveErr } = await supabase
-          .from("daily_progress_logs")
-          .upsert(
-            {
-              user_id: user.id,
-              logged_on: today,
-              weight_kg: currentWeight,
-              bmi: currentBmi != null ? round1(currentBmi) : null,
-              water_ml: Math.max(0, nextWaterMl),
-            },
-            { onConflict: "user_id,logged_on" },
-          )
-          .select("*")
-          .single();
-
-        if (saveErr) throw saveErr;
-        setProgressLogs((current) => [
-          ...current.filter((log) => log.logged_on !== today),
-          data,
-        ].sort((a, b) => a.logged_on.localeCompare(b.logged_on)));
-        setLoadState("ready");
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Water intake could not be saved.");
-      } finally {
-        setWaterBusy(false);
-      }
-    },
-    [currentBmi, currentWeight, today],
-  );
-
-  const hasChartData = populatedDays > 0;
-  const todayWater = todayRow?.waterMl ?? 0;
+  const hasChartData = rows.length > 0;
 
   return (
     <section className="glass rounded-lg border border-white/[0.08] p-5 sm:p-6">
@@ -408,14 +294,12 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-brand-neon">
                 Progress analytics
               </p>
-              <h3 className="mt-2 text-xl font-black text-white">
-                Long-term health trends
-              </h3>
+              <h3 className="mt-2 text-xl font-black text-white">Real tracked trends</h3>
             </div>
           </div>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-white/52">
-            Visual progress from your profile metrics, Supabase food log, and daily
-            water snapshots.
+            Charts use only saved food logs, hydration logs, and current profile targets.
+            Missing days stay missing.
           </p>
         </div>
 
@@ -459,17 +343,11 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
         </div>
       ) : (
         <div className="mt-6 space-y-6">
-          {error ? (
-            <div className="rounded-lg border border-red-300/15 bg-red-400/[0.06] px-4 py-3 text-sm font-semibold text-red-100">
-              {error}
-            </div>
-          ) : null}
-
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryCard
-              label="Adherence"
-              value={adherence == null ? "-" : `${adherence}%`}
-              detail={`${mode}-day target consistency`}
+              label="Tracked days"
+              value={`${rows.length}`}
+              detail={`Actual days in the last ${mode} days`}
               icon={Activity}
             />
             <SummaryCard
@@ -477,7 +355,7 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
               value={`${todayRow?.calories ?? 0}`}
               detail={
                 targets.dailyCalories != null
-                  ? `${Math.max(0, targets.dailyCalories - (todayRow?.calories ?? 0))} kcal remaining today`
+                  ? `Target ${targets.dailyCalories} kcal`
                   : "Complete profile for target"
               }
               icon={Flame}
@@ -493,185 +371,70 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
               icon={Scale}
             />
             <SummaryCard
-              label="Water"
-              value={`${todayWater} ml`}
-              detail={
-                targets.hydrationMl != null
-                  ? `Target ${targets.hydrationMl} ml`
-                  : "Complete profile for target"
-              }
+              label="Adherence"
+              value={adherence == null ? "-" : `${adherence}%`}
+              detail="Only from days with saved logs"
               icon={Droplets}
             />
           </div>
 
-          <div className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-black text-white">Water intake</p>
-                <p className="mt-0.5 text-[10px] text-white/35">
-                  Saved to Supabase for the trend chart.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-9 px-3 text-xs"
-                  isLoading={waterBusy}
-                  onClick={() => saveWater(todayWater + 250)}
-                >
-                  +250 ml
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-9 px-3 text-xs"
-                  disabled={waterBusy}
-                  onClick={() => saveWater(Math.max(0, todayWater - 250))}
-                >
-                  -250 ml
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-9 px-3 text-xs"
-                  disabled={waterBusy}
-                  onClick={() => saveWater(0)}
-                >
-                  Reset
-                </Button>
-              </div>
-            </div>
-          </div>
-
           {!hasChartData ? (
             <div className="rounded-lg border border-dashed border-white/[0.14] bg-white/[0.02] px-5 py-10 text-center">
-              <p className="text-base font-black text-white">
-                No progress data yet
-              </p>
+              <p className="text-base font-black text-white">Not enough data yet</p>
               <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-white/45">
-                Log food, update profile metrics, or save water intake to start filling
-                these charts.
+                Add a food entry or hydration entry. Once a real row exists in Supabase,
+                it will appear here after refresh.
               </p>
             </div>
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
-              <ChartCard title="Weight progress" hint="Daily weight snapshots from profile metrics">
+              <ChartCard title="Calorie intake" hint="Only dates with saved food logs">
                 <div className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartRows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                      <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" />
-                      <XAxis dataKey="label" {...CHART_AXIS} tickLine={false} />
-                      <YAxis {...CHART_AXIS} tickLine={false} width={44} domain={["auto", "auto"]} />
-                      <Tooltip
-                        {...CHART_TOOLTIP}
-                        formatter={(value: unknown) => [
-                          typeof value === "number" ? `${value} kg` : "-",
-                          "Weight",
-                        ]}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="weightKg"
-                        stroke={NEON}
-                        strokeWidth={2}
-                        dot={{ r: 2, fill: NEON }}
-                        connectNulls
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </ChartCard>
-
-              <ChartCard title="Calorie intake trend" hint="Daily consumed calories from food log">
-                <div className="h-56 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartRows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                    <BarChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                       <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="label" {...CHART_AXIS} tickLine={false} />
                       <YAxis {...CHART_AXIS} tickLine={false} width={44} />
-                      <Tooltip
-                        {...CHART_TOOLTIP}
-                        formatter={(value: unknown) => [`${value ?? 0} kcal`, "Calories"]}
-                      />
+                      <Tooltip {...CHART_TOOLTIP} formatter={(value: unknown) => [`${value ?? 0} kcal`, "Calories"]} />
                       <Bar dataKey="calories" fill={NEON} radius={[4, 4, 0, 0]} opacity={0.85} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </ChartCard>
 
-              <ChartCard title="Protein intake trend" hint="Daily consumed protein from food log">
+              <ChartCard title="Protein intake" hint="Only dates with saved protein values">
                 <div className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartRows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                    <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                       <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" />
                       <XAxis dataKey="label" {...CHART_AXIS} tickLine={false} />
                       <YAxis {...CHART_AXIS} tickLine={false} width={44} />
-                      <Tooltip
-                        {...CHART_TOOLTIP}
-                        formatter={(value: unknown) => [`${value ?? 0} g`, "Protein"]}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="proteinG"
-                        stroke={NEON}
-                        strokeWidth={2}
-                        dot={{ r: 2, fill: NEON }}
-                      />
+                      <Tooltip {...CHART_TOOLTIP} formatter={(value: unknown) => [`${value ?? 0} g`, "Protein"]} />
+                      <Line type="monotone" dataKey="proteinG" stroke={NEON} strokeWidth={2} dot={{ r: 2, fill: NEON }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
               </ChartCard>
 
-              <ChartCard title="Water intake trend" hint="Daily water ml saved in progress logs">
+              <ChartCard title="Hydration" hint="Only dates with saved hydration logs">
                 <div className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartRows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                    <BarChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                       <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="label" {...CHART_AXIS} tickLine={false} />
                       <YAxis {...CHART_AXIS} tickLine={false} width={44} />
-                      <Tooltip
-                        {...CHART_TOOLTIP}
-                        formatter={(value: unknown) => [`${value ?? 0} ml`, "Water"]}
-                      />
+                      <Tooltip {...CHART_TOOLTIP} formatter={(value: unknown) => [`${value ?? 0} ml`, "Water"]} />
                       <Bar dataKey="waterMl" fill={MUTED_LINE} radius={[4, 4, 0, 0]} opacity={0.9} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </ChartCard>
 
-              <ChartCard title="BMI trend" hint="Computed from saved weight and current height">
-                <div className="h-56 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartRows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                      <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" />
-                      <XAxis dataKey="label" {...CHART_AXIS} tickLine={false} />
-                      <YAxis {...CHART_AXIS} tickLine={false} width={44} domain={["auto", "auto"]} />
-                      <Tooltip
-                        {...CHART_TOOLTIP}
-                        formatter={(value: unknown) => [
-                          typeof value === "number" ? String(value) : "-",
-                          "BMI",
-                        ]}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="bmi"
-                        stroke={NEON}
-                        strokeWidth={2}
-                        dot={{ r: 2, fill: NEON }}
-                        connectNulls
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </ChartCard>
-
-              <ChartCard title="Adherence by day" hint="Calories, protein, and water target checks">
+              <ChartCard title="Daily target match" hint="Calculated from actual logged days">
                 <div className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={chartRows.map((row) => ({
+                      data={rows.map((row) => ({
                         label: row.label,
                         adherence: adherencePercent([row]) ?? 0,
                       }))}
@@ -680,10 +443,7 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
                       <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="label" {...CHART_AXIS} tickLine={false} />
                       <YAxis {...CHART_AXIS} tickLine={false} width={44} domain={[0, 100]} />
-                      <Tooltip
-                        {...CHART_TOOLTIP}
-                        formatter={(value: unknown) => [`${value ?? 0}%`, "Adherence"]}
-                      />
+                      <Tooltip {...CHART_TOOLTIP} formatter={(value: unknown) => [`${value ?? 0}%`, "Match"]} />
                       <Bar dataKey="adherence" fill={NEON} radius={[4, 4, 0, 0]} opacity={0.75} />
                     </BarChart>
                   </ResponsiveContainer>

@@ -9,9 +9,9 @@ import type { MealPlanResult, MealSlot } from "@/lib/meal-recommendations/types"
 import { createClient } from "@/utils/supabase/client";
 
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
+type HealthNote = Database["public"]["Tables"]["health_notes"]["Row"];
 
 type HealthNotesRow = {
-  user_id: string;
   acne: string | null;
   migraine: string | null;
   knee_pain: string | null;
@@ -31,15 +31,20 @@ function round1(n: number) {
   return Math.round(n * 10) / 10;
 }
 
-function optionalNotesUnavailable(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const maybeError = error as { code?: string; message?: string };
-  return (
-    maybeError.code === "42P01" ||
-    maybeError.code === "PGRST205" ||
-    (typeof maybeError.message === "string" &&
-      maybeError.message.toLowerCase().includes("health_condition_notes"))
-  );
+function toMealHealthNotes(rows: HealthNote[] | null): HealthNotesRow | null {
+  if (!rows?.length) return null;
+  const notes: HealthNotesRow = {
+    acne: null,
+    migraine: null,
+    knee_pain: null,
+    hair_fall: null,
+  };
+  for (const row of rows) {
+    if (row.condition_key in notes) {
+      notes[row.condition_key as keyof HealthNotesRow] = row.note;
+    }
+  }
+  return notes;
 }
 
 export function MealRecommendationsSection() {
@@ -74,17 +79,18 @@ export function MealRecommendationsSection() {
               .eq("user_id", user.id)
               .maybeSingle<MetricsRow>(),
             supabase
-              .from("health_condition_notes")
-              .select("user_id, acne, migraine, knee_pain, hair_fall")
+              .from("health_notes")
+              .select("*")
               .eq("user_id", user.id)
-              .maybeSingle<HealthNotesRow>(),
+              .in("condition_key", ["acne", "migraine", "knee_pain", "hair_fall"]),
           ]);
 
         if (mErr) throw mErr;
         if (cancelled) return;
         setMetrics(m ?? null);
-        setNotes(nErr && optionalNotesUnavailable(nErr) ? null : (n ?? null));
-        if (nErr && !optionalNotesUnavailable(nErr)) {
+        setNotes(nErr ? null : toMealHealthNotes((n ?? []) as HealthNote[]));
+        if (nErr) {
+          console.error("Meal recommendation health notes database error", nErr);
           setError(
             "Health notes could not be loaded, so meal ideas are using profile metrics only.",
           );

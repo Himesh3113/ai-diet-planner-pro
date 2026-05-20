@@ -6,15 +6,12 @@ import { createClient } from "@/utils/supabase/server";
 
 type ChatRole = "user" | "assistant" | "system";
 type ChatMessage = { role: ChatRole; content: string };
+
+// Types for database rows
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
-type FoodEntry = Database["public"]["Tables"]["food_entries"]["Row"];
-type ProgressLog = Database["public"]["Tables"]["daily_progress_logs"]["Row"];
-type HealthNotesRow = {
-  acne: string | null;
-  migraine: string | null;
-  knee_pain: string | null;
-  hair_fall: string | null;
-};
+type FoodEntry = Database["public"]["Tables"]["food_logs"]["Row"];
+type HydrationLog = Database["public"]["Tables"]["hydration_logs"]["Row"];
+type HealthNote = Database["public"]["Tables"]["health_notes"]["Row"];
 
 const MAX_MESSAGES_PER_HOUR = 20;
 const MAX_PROMPT_CHARS = 1200;
@@ -24,12 +21,10 @@ function getOpenRouterModel() {
   if (!model) {
     throw new Error("OPENROUTER_MODEL is not configured.");
   }
-  if (model !== "openrouter/free" && !model.endsWith(":free")) {
-    throw new Error("OPENROUTER_MODEL must be a free OpenRouter model.");
-  }
   return model;
 }
 
+// Helper to get today's date key (YYYY-MM-DD)
 function todayKey() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -38,44 +33,40 @@ function todayKey() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function daysAgoKey(daysAgo: number) {
+function daysAgoKey(days: number) {
   const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
+  d.setDate(d.getDate() - days);
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// Summarize recent food entries for the context
 function recentFoodSummary(entries: FoodEntry[]) {
   const today = todayKey();
-  const todayEntries = entries.filter((entry) => entry.logged_on === today);
-  const totalCalories = todayEntries.reduce((sum, entry) => sum + entry.calories, 0);
-  const totalProtein = todayEntries.reduce(
-    (sum, entry) => sum + Number(entry.protein_g),
-    0,
-  );
+  const todayEntries = entries.filter((e) => e.logged_on === today);
+  const totalCalories = todayEntries.reduce((sum, e) => sum + e.calories, 0);
+  const totalProtein = todayEntries.reduce((sum, e) => sum + Number(e.protein_g), 0);
   const lines = todayEntries.slice(0, 12).map(
-    (entry) =>
-      `${entry.meal_type}: ${entry.food_name} (${entry.quantity}, ${entry.calories} kcal, ${entry.protein_g}g protein)`,
+    (e) => `${e.meal_type}: ${e.food_name} (${e.quantity}, ${e.calories} kcal, ${e.protein_g}g protein)`,
   );
-
-  return {
-    totalCalories,
-    totalProtein: Math.round(totalProtein * 10) / 10,
-    lines,
-  };
+  return { totalCalories, totalProtein: Math.round(totalProtein * 10) / 10, lines };
 }
 
+// Helper to build a concise context string for the AI assistant
 function buildContext(args: {
   metrics: MetricsRow | null;
-  notes: HealthNotesRow | null;
+  notes: HealthNote[];
   foodEntries: FoodEntry[];
-  progressLogs: ProgressLog[];
+  hydrationLogs: HydrationLog[];
 }) {
   const targets = buildNutritionTargets(args.metrics);
   const food = recentFoodSummary(args.foodEntries);
-  const latestProgress = args.progressLogs[0] ?? null;
+  const todayHydration = args.hydrationLogs.find((log) => log.logged_on === todayKey());
+  const notesByCondition = Object.fromEntries(
+    args.notes.map((note) => [note.condition_key, note.note]),
+  );
 
   return [
     "USER CONTEXT",
@@ -99,26 +90,34 @@ function buildContext(args: {
     })}`,
     `Today's food totals: ${food.totalCalories} kcal, ${food.totalProtein}g protein.`,
     `Today's food entries: ${food.lines.length ? food.lines.join("; ") : "none logged yet"}.`,
-    `Hydration/progress: ${JSON.stringify({
-      latestDate: latestProgress?.logged_on ?? null,
-      waterMl: latestProgress?.water_ml ?? 0,
-      snapshotWeightKg: latestProgress?.weight_kg ?? null,
-      snapshotBmi: latestProgress?.bmi ?? null,
+    `Hydration logs: ${JSON.stringify({
+      todayWaterMl: todayHydration?.water_ml ?? 0,
+      recentTrackedDays: args.hydrationLogs.map((log) => ({
+        date: log.logged_on,
+        waterMl: log.water_ml,
+      })),
     })}`,
-    `Health notes: ${JSON.stringify(args.notes ?? {})}`,
+    `Health notes: ${JSON.stringify(notesByCondition)}`,
   ].join("\n");
 }
 
+// System prompt wrapper for the AI assistant
 function systemPrompt(context: string) {
   return [
-    "You are a careful AI nutrition assistant inside AI Diet Planner Pro.",
-    "Use the provided user context to answer nutrition, hydration, food logging, wellness, and fitness-fueling questions.",
+    "You are a premium AI nutrition assistant inside AI Diet Planner Pro.",
+    "Use the provided user context to answer nutrition, hydration, food logging, wellness, and fitness-fueling questions with practical daily food guidance.",
+    "Answer style:",
+    "- Be concise: normally 4-7 bullets total, no long essays.",
+    "- Recommend only the 3-5 most useful foods or actions for the question.",
+    "- For each food recommendation, include a short 'why it helps' reason tied to protein, fiber, glycemic load, minerals, hydration, inflammation, sleep, or recovery.",
+    "- Include 'prefer' and 'avoid/limit' only when useful; avoid giant food lists.",
+    "- Use everyday foods a normal person can actually eat today.",
+    "- If the user's food log is available, reference the calorie/protein gap directly.",
     "Safety rules:",
     "- Do not diagnose, treat, or claim to cure any medical condition.",
     "- Do not recommend dangerous restriction, dehydration, purging, extreme fasting, unsafe supplements, or medication changes.",
     "- For diabetes, migraines, hair loss, acne, pain, pregnancy, eating disorders, or disease-specific advice, encourage the user to work with a qualified clinician.",
-    "- Keep answers practical and concise: 2-5 short paragraphs or bullets.",
-    "- Include a short wellness disclaimer at the end of every response.",
+    "- End with one short medical safety line only when the topic is disease-specific or symptoms are persistent/severe.",
     "- If data is missing, say what is missing and give safe general guidance.",
     context,
   ].join("\n\n");
@@ -127,46 +126,52 @@ function systemPrompt(context: string) {
 async function enforceRateLimit(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-) {
-  const now = new Date();
-  const { data } = await supabase
-    .from("ai_assistant_rate_limits")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!data) {
-    await supabase.from("ai_assistant_rate_limits").insert({
-      user_id: userId,
-      window_start: now.toISOString(),
-      message_count: 1,
-    });
-    return null;
-  }
-
-  const windowStart = new Date(data.window_start);
-  const elapsedMs = now.getTime() - windowStart.getTime();
-  if (elapsedMs >= 60 * 60 * 1000) {
-    await supabase
+): Promise<string | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+    const now = new Date();
+    const { data } = await db
       .from("ai_assistant_rate_limits")
-      .update({ window_start: now.toISOString(), message_count: 1 })
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!data) {
+      await db.from("ai_assistant_rate_limits").insert({
+        user_id: userId,
+        window_start: now.toISOString(),
+        message_count: 1,
+      });
+      return null;
+    }
+
+    const windowStart = new Date(data.window_start as string);
+    const elapsedMs = now.getTime() - windowStart.getTime();
+    if (elapsedMs >= 60 * 60 * 1000) {
+      await db
+        .from("ai_assistant_rate_limits")
+        .update({ window_start: now.toISOString(), message_count: 1 })
+        .eq("user_id", userId);
+      return null;
+    }
+
+    if (data.message_count >= MAX_MESSAGES_PER_HOUR) {
+      const retryAt = new Date(windowStart.getTime() + 60 * 60 * 1000);
+      return `Rate limit reached. Try again after ${retryAt.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}.`;
+    }
+
+    await db
+      .from("ai_assistant_rate_limits")
+      .update({ message_count: data.message_count + 1 })
       .eq("user_id", userId);
     return null;
+  } catch {
+    return null;
   }
-
-  if (data.message_count >= MAX_MESSAGES_PER_HOUR) {
-    const retryAt = new Date(windowStart.getTime() + 60 * 60 * 1000);
-    return `Rate limit reached. Try again after ${retryAt.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}.`;
-  }
-
-  await supabase
-    .from("ai_assistant_rate_limits")
-    .update({ message_count: data.message_count + 1 })
-    .eq("user_id", userId);
-  return null;
 }
 
 async function openRouterStream(messages: ChatMessage[], model: string, attempt = 0) {
@@ -188,7 +193,7 @@ async function openRouterStream(messages: ChatMessage[], model: string, attempt 
       messages,
       stream: true,
       temperature: 0.4,
-      max_completion_tokens: 650,
+      max_completion_tokens: 420,
     }),
   });
 
@@ -258,31 +263,71 @@ export async function POST(request: NextRequest) {
     }
 
     const since = daysAgoKey(13);
-    const [{ data: metrics }, { data: notes }, { data: foods }, { data: progress }] =
-      await Promise.all([
-        supabase
-          .from("user_metrics")
-          .select("*")
-          .eq("user_id", user.id)
-          .maybeSingle<MetricsRow>(),
-        supabase
-          .from("health_condition_notes")
-          .select("acne, migraine, knee_pain, hair_fall")
-          .eq("user_id", user.id)
-          .maybeSingle<HealthNotesRow>(),
-        supabase
-          .from("food_entries")
-          .select("*")
-          .eq("user_id", user.id)
-          .gte("logged_on", since)
-          .order("logged_on", { ascending: false }),
-        supabase
-          .from("daily_progress_logs")
-          .select("*")
-          .eq("user_id", user.id)
-          .gte("logged_on", since)
-          .order("logged_on", { ascending: false }),
-      ]);
+
+    const { data: metrics, error: metricsErr } = await supabase
+      .from("user_metrics")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle<MetricsRow>();
+
+    if (metricsErr) {
+      return Response.json(
+        { error: metricsErr.message || "Could not load user metrics." },
+        { status: 500 },
+      );
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+
+    const { data: notesRaw, error: notesErr } = await db
+      .from("health_notes")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+
+    if (notesErr) {
+      console.error("AI assistant health notes database error", notesErr);
+    }
+    const notes: HealthNote[] = notesErr || !notesRaw ? [] : notesRaw;
+
+    const { data: foodsRaw, error: foodsErr } = await db
+      .from("food_logs")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("logged_on", since)
+      .order("logged_on", { ascending: false });
+
+    if (foodsErr) {
+      console.error("AI assistant food logs database error", foodsErr);
+    }
+
+    const foods: FoodEntry[] =
+      foodsErr || !foodsRaw
+        ? []
+        : (foodsRaw as FoodEntry[]).filter(
+            (row) =>
+              typeof row.logged_on === "string" &&
+              typeof row.food_name === "string" &&
+              typeof row.calories === "number",
+          );
+
+    const { data: hydrationRaw, error: hydrationErr } = await db
+      .from("hydration_logs")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("logged_on", since)
+      .order("logged_on", { ascending: false });
+
+    if (hydrationErr) {
+      console.error("AI assistant hydration logs database error", hydrationErr);
+    }
+    const hydrationLogs: HydrationLog[] =
+      hydrationErr || !hydrationRaw
+        ? []
+        : (hydrationRaw as HydrationLog[]).filter(
+            (row) => typeof row.logged_on === "string",
+          );
 
     const model = getOpenRouterModel();
     // Build a concise context for the AI using the fetched data
@@ -290,7 +335,7 @@ export async function POST(request: NextRequest) {
       metrics: metrics ?? null,
       notes,
       foodEntries: foods ?? [],
-      progressLogs: progress ?? [],
+      hydrationLogs,
     });
 
     const history = (body.history ?? [])
@@ -307,12 +352,16 @@ export async function POST(request: NextRequest) {
       { role: "user", content: userMessage },
     ];
 
-    await supabase.from("ai_assistant_messages").insert({
-      user_id: user.id,
-      role: "user",
-      content: userMessage,
-      model,
-    });
+    try {
+      await db.from("ai_assistant_messages").insert({
+        user_id: user.id,
+        role: "user",
+        content: userMessage,
+        model,
+      });
+    } catch {
+      // Optional table
+    }
 
     const upstream = await openRouterStream(messages, model);
     const decoder = new TextDecoder();
@@ -347,12 +396,16 @@ export async function POST(request: NextRequest) {
           }
 
           if (assistantText.trim()) {
-            await supabase.from("ai_assistant_messages").insert({
-              user_id: user.id,
-              role: "assistant",
-              content: assistantText,
-              model,
-            });
+            try {
+              await db.from("ai_assistant_messages").insert({
+                user_id: user.id,
+                role: "assistant",
+                content: assistantText,
+                model,
+              });
+            } catch {
+              // Optional table
+            }
           }
 
           controller.close();

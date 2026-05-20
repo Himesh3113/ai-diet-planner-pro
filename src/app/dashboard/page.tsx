@@ -38,14 +38,14 @@ export default async function DashboardPage() {
         <div className="glass rounded-lg border border-white/[0.08] p-6 sm:p-8">
           <div className="max-w-2xl">
             <p className="text-sm font-bold uppercase tracking-[0.22em] text-brand-neon">
-              Health Dashboard V1
+              Premium health dashboard
             </p>
             <h2 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl">
               Your personalized health snapshot
             </h2>
             <p className="mt-4 text-sm leading-6 text-white/52 sm:text-base">
-              This dashboard surfaces your onboarding profile as clean, actionable modules.
-              AI meal planning remains disabled (placeholder UI only).
+              Live nutrition targets, food logs, progress trends, and condition-aware
+              AI guidance from your saved profile.
             </p>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">

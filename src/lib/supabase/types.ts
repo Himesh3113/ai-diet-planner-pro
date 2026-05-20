@@ -79,6 +79,226 @@ export type Database = {
           },
         ];
       };
+      food_logs: {
+        Row: {
+          calories: number;
+          created_at: string;
+          food_name: string;
+          id: string;
+          logged_on: string;
+          meal_type: "breakfast" | "lunch" | "dinner" | "snacks";
+          protein_g: number;
+          quantity: string;
+          user_id: string;
+        };
+        Insert: {
+          calories: number;
+          created_at?: string;
+          food_name: string;
+          id?: string;
+          logged_on?: string;
+          meal_type: "breakfast" | "lunch" | "dinner" | "snacks";
+          protein_g?: number;
+          quantity?: string;
+          user_id: string;
+        };
+        Update: {
+          calories?: number;
+          created_at?: string;
+          food_name?: string;
+          id?: string;
+          logged_on?: string;
+          meal_type?: "breakfast" | "lunch" | "dinner" | "snacks";
+          protein_g?: number;
+          quantity?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "food_logs_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
+      health_condition_notes: {
+        Row: {
+          acne: string | null;
+          created_at: string;
+          diabetes: string | null;
+          digestion_bloating: string | null;
+          gym_muscle_gain: string | null;
+          hair_fall: string | null;
+          high_bp: string | null;
+          knee_pain: string | null;
+          low_energy: string | null;
+          migraine: string | null;
+          pcos: string | null;
+          poor_sleep: string | null;
+          stress_anxiety: string | null;
+          thyroid: string | null;
+          updated_at: string;
+          user_id: string;
+          vitamin_deficiency: string | null;
+          weight_gain: string | null;
+          weight_loss: string | null;
+        };
+        Insert: {
+          acne?: string | null;
+          created_at?: string;
+          diabetes?: string | null;
+          digestion_bloating?: string | null;
+          gym_muscle_gain?: string | null;
+          hair_fall?: string | null;
+          high_bp?: string | null;
+          knee_pain?: string | null;
+          low_energy?: string | null;
+          migraine?: string | null;
+          pcos?: string | null;
+          poor_sleep?: string | null;
+          stress_anxiety?: string | null;
+          thyroid?: string | null;
+          updated_at?: string;
+          user_id: string;
+          vitamin_deficiency?: string | null;
+          weight_gain?: string | null;
+          weight_loss?: string | null;
+        };
+        Update: {
+          acne?: string | null;
+          created_at?: string;
+          diabetes?: string | null;
+          digestion_bloating?: string | null;
+          gym_muscle_gain?: string | null;
+          hair_fall?: string | null;
+          high_bp?: string | null;
+          knee_pain?: string | null;
+          low_energy?: string | null;
+          migraine?: string | null;
+          pcos?: string | null;
+          poor_sleep?: string | null;
+          stress_anxiety?: string | null;
+          thyroid?: string | null;
+          updated_at?: string;
+          user_id?: string;
+          vitamin_deficiency?: string | null;
+          weight_gain?: string | null;
+          weight_loss?: string | null;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "health_condition_notes_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
+      health_conditions: {
+        Row: {
+          category: string;
+          created_at: string;
+          description: string | null;
+          display_order: number;
+          icon_name: string | null;
+          id: string;
+          key: string;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          category?: string;
+          created_at?: string;
+          description?: string | null;
+          display_order?: number;
+          icon_name?: string | null;
+          id?: string;
+          key: string;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          description?: string | null;
+          display_order?: number;
+          icon_name?: string | null;
+          id?: string;
+          key?: string;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      health_notes: {
+        Row: {
+          condition_key: string;
+          created_at: string;
+          id: string;
+          note: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          condition_key: string;
+          created_at?: string;
+          id?: string;
+          note: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          condition_key?: string;
+          created_at?: string;
+          id?: string;
+          note?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "health_notes_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
+      hydration_logs: {
+        Row: {
+          created_at: string;
+          id: string;
+          logged_on: string;
+          updated_at: string;
+          user_id: string;
+          water_ml: number;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          logged_on?: string;
+          updated_at?: string;
+          user_id: string;
+          water_ml?: number;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          logged_on?: string;
+          updated_at?: string;
+          user_id?: string;
+          water_ml?: number;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "hydration_logs_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
       daily_progress_logs: {
         Row: {
           bmi: number | null;

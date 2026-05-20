@@ -1,130 +1,214 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity,
-  BarChart3,
-  Droplets,
-  Flame,
-  Sparkles,
-  TrendingUp,
-} from "lucide-react";
-import type { Database } from "@/lib/supabase/types";
-import { buildWeeklyAnalyticsModel } from "@/lib/weekly-analytics";
-import type { HealthNotesRow } from "@/lib/weekly-analytics/types";
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { Apple, BarChart3, Droplets, Flame, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { buildNutritionTargets } from "@/lib/meal-recommendations/nutrition-from-metrics";
+import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/client";
-import { AnalyticsBadgeGrid } from "./analytics/analytics-badge-grid";
-import { CompletionRing } from "./analytics/completion-ring";
-import { WeeklyTrendCharts } from "./analytics/weekly-trend-charts";
+import { CHART_AXIS, CHART_GRID, CHART_TOOLTIP, MUTED_LINE, NEON } from "./analytics/chart-styles";
 
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
-type ProfileSlice = Pick<
-  Database["public"]["Tables"]["profiles"]["Row"],
-  "created_at" | "onboarding_completed"
->;
+type FoodLog = Database["public"]["Tables"]["food_logs"]["Row"];
+type HydrationLog = Database["public"]["Tables"]["hydration_logs"]["Row"];
 
-function optionalNotesUnavailable(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const maybeError = error as { code?: string; message?: string };
+type DayRow = {
+  dateKey: string;
+  label: string;
+  calories: number;
+  proteinG: number;
+  waterMl: number;
+};
+
+function daysAgoKey(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function todayKey() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function labelForDate(key: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function round1(n: number) {
+  return Math.round(n * 10) / 10;
+}
+
+function buildRows(foodLogs: FoodLog[], hydrationLogs: HydrationLog[]) {
+  const byDate = new Map<string, DayRow>();
+  for (const log of foodLogs) {
+    const row = byDate.get(log.logged_on) ?? {
+      dateKey: log.logged_on,
+      label: labelForDate(log.logged_on),
+      calories: 0,
+      proteinG: 0,
+      waterMl: 0,
+    };
+    row.calories += log.calories;
+    row.proteinG += Number(log.protein_g);
+    byDate.set(log.logged_on, row);
+  }
+  for (const log of hydrationLogs) {
+    const row = byDate.get(log.logged_on) ?? {
+      dateKey: log.logged_on,
+      label: labelForDate(log.logged_on),
+      calories: 0,
+      proteinG: 0,
+      waterMl: 0,
+    };
+    row.waterMl = log.water_ml;
+    byDate.set(log.logged_on, row);
+  }
+  return [...byDate.values()]
+    .sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+    .map((row) => ({ ...row, proteinG: round1(row.proteinG) }));
+}
+
+function StatPill({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: typeof Flame;
+}) {
   return (
-    maybeError.code === "42P01" ||
-    maybeError.code === "PGRST205" ||
-    (typeof maybeError.message === "string" &&
-      maybeError.message.toLowerCase().includes("health_condition_notes"))
+    <div className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/32">
+            {label}
+          </p>
+          <p className="mt-2 text-2xl font-black tabular-nums text-white">{value}</p>
+        </div>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-brand-neon">
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
   );
 }
 
 export function WeeklyAnalyticsSection() {
   const [metrics, setMetrics] = useState<MetricsRow | null>(null);
-  const [profile, setProfile] = useState<ProfileSlice | null>(null);
-  const [notes, setNotes] = useState<HealthNotesRow | null>(null);
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
-    "loading",
-  );
+  const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
+  const [hydrationLogs, setHydrationLogs] = useState<HydrationLog[]>([]);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
+
+  const load = useCallback(async () => {
+    try {
+      setLoadState("loading");
+      setError(null);
+      const supabase = createClient();
+      const {
+        data: { user },
+        error: authErr,
+      } = await supabase.auth.getUser();
+      if (authErr) throw authErr;
+      if (!user) throw new Error("Sign in again to load weekly analytics.");
+
+      const start = daysAgoKey(6);
+      const end = todayKey();
+      const [{ data: metricsData, error: metricsErr }, { data: foods, error: foodsErr }, { data: hydration, error: hydrationErr }] =
+        await Promise.all([
+          supabase
+            .from("user_metrics")
+            .select("*")
+            .eq("user_id", user.id)
+            .maybeSingle<MetricsRow>(),
+          supabase
+            .from("food_logs")
+            .select("*")
+            .eq("user_id", user.id)
+            .gte("logged_on", start)
+            .lte("logged_on", end)
+            .order("logged_on", { ascending: true }),
+          supabase
+            .from("hydration_logs")
+            .select("*")
+            .eq("user_id", user.id)
+            .gte("logged_on", start)
+            .lte("logged_on", end)
+            .order("logged_on", { ascending: true }),
+        ]);
+
+      if (metricsErr) throw metricsErr;
+      if (foodsErr) throw foodsErr;
+      if (hydrationErr) throw hydrationErr;
+      setMetrics(metricsData ?? null);
+      setFoodLogs(foods ?? []);
+      setHydrationLogs(hydration ?? []);
+      setLoadState("ready");
+    } catch (e) {
+      console.error("Weekly analytics database error", e);
+      setError(e instanceof Error ? e.message : "Weekly analytics could not load.");
+      setLoadState("error");
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
 
-    async function load() {
-      try {
-        setLoadState("loading");
-        setError(null);
-        const supabase = createClient();
-        const {
-          data: { user },
-          error: authErr,
-        } = await supabase.auth.getUser();
-        if (authErr) throw authErr;
-        if (!user) throw new Error("Not authenticated");
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
-        const [{ data: m, error: mErr }, { data: p, error: pErr }, { data: n, error: nErr }] =
-          await Promise.all([
-            supabase
-              .from("user_metrics")
-              .select("*")
-              .eq("user_id", user.id)
-              .maybeSingle<MetricsRow>(),
-            supabase
-              .from("profiles")
-              .select("created_at, onboarding_completed")
-              .eq("id", user.id)
-              .maybeSingle<ProfileSlice>(),
-            supabase
-              .from("health_condition_notes")
-              .select(
-                "user_id, acne, migraine, knee_pain, hair_fall, created_at, updated_at",
-              )
-              .eq("user_id", user.id)
-              .maybeSingle<HealthNotesRow>(),
-          ]);
-
-        if (mErr) throw mErr;
-        if (pErr) throw pErr;
-        if (cancelled) return;
-        setMetrics(m ?? null);
-        setProfile(p ?? null);
-        setNotes(nErr && optionalNotesUnavailable(nErr) ? null : (n ?? null));
-        if (nErr && !optionalNotesUnavailable(nErr)) {
-          setError(
-            "Health notes could not be loaded, so analytics are using profile metrics only.",
-          );
-        }
-        setLoadState("ready");
-      } catch (e) {
-        if (cancelled) return;
-        const message =
-          e instanceof Error ? e.message : "Profile analytics could not be loaded.";
-        if (message === "Not authenticated") {
-          setError("Sign in again to load weekly analytics.");
-          setLoadState("error");
-          return;
-        }
-        setMetrics(null);
-        setProfile(null);
-        setNotes(null);
-        setError(`Using default analytics because profile metrics failed: ${message}`);
-        setLoadState("ready");
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
+  useEffect(() => {
+    const handleChanged = () => {
+      void load();
     };
-  }, [tick]);
+    window.addEventListener("food-log:changed", handleChanged);
+    window.addEventListener("hydration-log:changed", handleChanged);
+    return () => {
+      window.removeEventListener("food-log:changed", handleChanged);
+      window.removeEventListener("hydration-log:changed", handleChanged);
+    };
+  }, [load]);
 
-  const model = useMemo(
+  const rows = useMemo(() => buildRows(foodLogs, hydrationLogs), [foodLogs, hydrationLogs]);
+  const targets = useMemo(() => buildNutritionTargets(metrics), [metrics]);
+  const totals = useMemo(
     () =>
-      loadState === "ready"
-        ? buildWeeklyAnalyticsModel({ metrics, profile, notes })
-        : null,
-    [loadState, metrics, profile, notes],
+      rows.reduce(
+        (acc, row) => ({
+          calories: acc.calories + row.calories,
+          proteinG: acc.proteinG + row.proteinG,
+          waterMl: acc.waterMl + row.waterMl,
+        }),
+        { calories: 0, proteinG: 0, waterMl: 0 },
+      ),
+    [rows],
   );
-
-  const hasTargets = Boolean(model?.days[0]?.calorieTarget != null);
 
   return (
     <section className="glass rounded-lg border border-white/[0.08] p-5 sm:p-6">
@@ -139,28 +223,27 @@ export function WeeklyAnalyticsSection() {
                 Weekly analytics
               </p>
               <h3 className="mt-2 text-xl font-black text-white">
-                Nutrition & health pulse
+                Actual tracked days only
               </h3>
             </div>
           </div>
           <p className="mt-3 text-sm leading-6 text-white/52">
-            Seven-day view derived from your Supabase profile and condition notes—no
-            external services.
+            This section does not fabricate missing history. One tracked day means one
+            chart point.
           </p>
-          {model ? (
-            <p className="mt-2 text-[11px] font-medium text-white/30">
-              Window {model.weekLabel}
-            </p>
-          ) : null}
         </div>
         <Button
           type="button"
           variant="ghost"
           className="h-10 shrink-0 gap-2 self-start sm:self-auto"
           disabled={loadState === "loading"}
-          onClick={() => setTick((t) => t + 1)}
+          onClick={load}
         >
-          <Sparkles className="h-4 w-4" />
+          {loadState === "loading" ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
           Refresh
         </Button>
       </div>
@@ -168,12 +251,7 @@ export function WeeklyAnalyticsSection() {
       {loadState === "loading" ? (
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="animate-pulse rounded-lg border border-white/[0.07] bg-white/[0.03] p-6"
-            >
-              <div className="mx-auto h-36 w-36 rounded-full bg-white/[0.06]" />
-            </div>
+            <div key={i} className="h-32 animate-pulse rounded-lg border border-white/[0.07] bg-white/[0.03]" />
           ))}
         </div>
       ) : loadState === "error" ? (
@@ -182,124 +260,63 @@ export function WeeklyAnalyticsSection() {
             {error ?? "Weekly analytics could not load."}
           </p>
         </div>
-      ) : model ? (
-        <div className="mt-6 space-y-8">
-          {error ? (
-            <div className="rounded-lg border border-amber-300/15 bg-amber-300/[0.05] px-4 py-3 text-xs leading-relaxed text-amber-100/85">
-              {error}
-            </div>
-          ) : null}
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start">
-            <div className="flex justify-center lg:justify-start">
-              <CompletionRing
-                percent={model.completionPercent}
-                subtitle="Weighted checklist: targets, activity, and recent updates."
-              />
+      ) : rows.length === 0 ? (
+        <div className="mt-6 rounded-lg border border-dashed border-white/[0.14] bg-white/[0.02] px-5 py-10 text-center">
+          <p className="text-base font-black text-white">Not enough data yet</p>
+          <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-white/45">
+            Add food or hydration logs. Weekly analytics will start once real rows
+            exist in Supabase.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-6 space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatPill label="Tracked days" value={String(rows.length)} icon={BarChart3} />
+            <StatPill label="Calories" value={`${totals.calories} kcal`} icon={Flame} />
+            <StatPill label="Protein" value={`${round1(totals.proteinG)} g`} icon={Apple} />
+            <StatPill label="Water" value={`${totals.waterMl} ml`} icon={Droplets} />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-4">
+              <p className="text-xs font-black text-white">Calories by tracked day</p>
+              <p className="mt-0.5 text-[10px] text-white/35">
+                Target: {targets.dailyCalories ?? "-"} kcal/day
+              </p>
+              <div className="mt-3 h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                    <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" {...CHART_AXIS} tickLine={false} />
+                    <YAxis {...CHART_AXIS} tickLine={false} width={44} />
+                    <Tooltip {...CHART_TOOLTIP} formatter={(value: unknown) => [`${value ?? 0} kcal`, "Calories"]} />
+                    <Bar dataKey="calories" fill={NEON} radius={[4, 4, 0, 0]} opacity={0.85} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
             <div className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/32">
-                Score breakdown
+              <p className="text-xs font-black text-white">Protein and hydration</p>
+              <p className="mt-0.5 text-[10px] text-white/35">
+                Targets: {targets.dailyProteinG ?? "-"} g protein · {targets.hydrationMl ?? "-"} ml water
               </p>
-              <ul className="mt-3 space-y-2">
-                {model.completionBreakdown.map((row) => (
-                  <li
-                    key={row.label}
-                    className="flex items-center justify-between gap-3 text-xs"
-                  >
-                    <span className="text-white/45">{row.label}</span>
-                    <span
-                      className={
-                        row.met ? "font-bold text-brand-neon" : "text-white/25"
-                      }
-                    >
-                      {row.met ? "✓" : "—"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="space-y-4 rounded-lg border border-white/[0.07] bg-white/[0.03] p-4">
-              <div className="flex items-start gap-2">
-                <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-brand-neon" />
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/32">
-                    Protein planning score
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-white/45">
-                    Proxy for target stability—true adherence needs meal logs (not stored
-                    server-side).
-                  </p>
-                </div>
+              <div className="mt-3 h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                    <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" />
+                    <XAxis dataKey="label" {...CHART_AXIS} tickLine={false} />
+                    <YAxis {...CHART_AXIS} tickLine={false} width={44} />
+                    <Tooltip {...CHART_TOOLTIP} />
+                    <Line type="monotone" dataKey="proteinG" name="Protein g" stroke={NEON} strokeWidth={2} dot={{ r: 2, fill: NEON }} />
+                    <Line type="monotone" dataKey="waterMl" name="Water ml" stroke={MUTED_LINE} strokeWidth={2} dot={{ r: 2, fill: MUTED_LINE }} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-              {model.proteinConsistencyPercent != null ? (
-                <>
-                  <div className="flex items-end justify-between gap-2">
-                    <span className="text-3xl font-black tabular-nums text-white">
-                      {model.proteinConsistencyPercent}
-                      <span className="text-lg text-white/35">%</span>
-                    </span>
-                    <Flame className="h-8 w-8 text-brand-neon/40" aria-hidden />
-                  </div>
-                  <div className="h-2 rounded-full bg-white/[0.06]">
-                    <div
-                      className="h-full rounded-full bg-brand-neon transition-all"
-                      style={{
-                        width: `${Math.min(100, model.proteinConsistencyPercent)}%`,
-                      }}
-                    />
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-white/38">
-                  Set weight and goal to estimate protein consistency.
-                </p>
-              )}
-
-              <div className="flex flex-wrap gap-3 border-t border-white/[0.06] pt-3 text-[11px] text-white/38">
-                <span className="inline-flex items-center gap-1">
-                  <Activity className="h-3.5 w-3.5 text-brand-neon" />
-                  Day {model.streakDaysSinceSignup + 1} on platform
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <Droplets className="h-3.5 w-3.5 text-brand-neon" />
-                  {model.metricsUpdatedThisWeek
-                    ? "Profile touched this week"
-                    : "Refresh profile when numbers change"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <WeeklyTrendCharts model={model} hasTargets={hasTargets} />
-
-          <p className="text-[11px] leading-relaxed text-white/32">{model.chartFootnote}</p>
-
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/32">
-              Condition-aware insights
-            </p>
-            <ul className="mt-3 space-y-2 text-sm leading-relaxed text-white/55">
-              {model.insights.map((line, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-neon/80" />
-                  <span>{line}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/32">
-              Progress badges
-            </p>
-            <div className="mt-3">
-              <AnalyticsBadgeGrid badges={model.badges} />
             </div>
           </div>
         </div>
-      ) : null}
+      )}
     </section>
   );
 }
