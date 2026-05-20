@@ -9,7 +9,6 @@ import {
   Leaf,
   Drumstick,
   Save,
-  Check,
   AlertCircle,
   RotateCcw,
 } from "lucide-react";
@@ -19,12 +18,12 @@ import { cn } from "@/lib/utils";
 import {
   AFFORDABILITY_OPTIONS,
   DIET_GOALS,
-  PREFERRED_FOODS,
   type Affordability,
   type DietFilter,
   type DietGoal,
   type PreferredFoodKey,
 } from "@/lib/diet-planner/constants";
+import { DietPlannerFoodPicker } from "./diet-planner-food-picker";
 import type { DietPlannerSnapshot } from "@/lib/diet-planner/db";
 import type { DailyDietPlan, MealMacros, MealPlanSlot, MealSlot } from "@/lib/diet-planner/types";
 
@@ -177,12 +176,13 @@ export function DietPlannerSection() {
     );
   };
 
-  const filteredFoodOptions = PREFERRED_FOODS.filter((food) => {
-    if (dietFilter === "veg") {
-      return food.tags.includes("veg");
-    }
-    return true;
-  });
+  const applyPreset = (keys: PreferredFoodKey[]) => {
+    setPreferredFoods((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) next.add(k);
+      return [...next];
+    });
+  };
 
   const savePayload = () => ({
     goal,
@@ -369,39 +369,20 @@ export function DietPlannerSection() {
             </div>
 
             <p className="border-b border-white/5 pb-2 pt-2 text-xs font-bold uppercase tracking-wider text-white/40">
-              Foods I Prefer &amp; Regularly Eat
+              Indian Food Library
             </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {filteredFoodOptions.map((food) => {
-                const selected = preferredFoods.includes(food.key);
-                return (
-                  <button
-                    key={food.key}
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => toggleFood(food.key)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs font-semibold transition",
-                      selected
-                        ? "border-brand-neon/50 bg-brand-neon/15 text-white"
-                        : "border-white/10 bg-white/[0.03] text-white/55 hover:border-white/20",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                        selected
-                          ? "border-brand-neon bg-brand-neon text-black"
-                          : "border-white/25",
-                      )}
-                    >
-                      {selected && <Check className="h-3 w-3" />}
-                    </span>
-                    {food.label}
-                  </button>
-                );
-              })}
-            </div>
+            <p className="text-[10px] leading-relaxed text-white/38">
+              {preferredFoods.length} preference
+              {preferredFoods.length === 1 ? "" : "s"} selected · macros shown per serving
+            </p>
+            <DietPlannerFoodPicker
+              preferredFoods={preferredFoods}
+              dietFilter={dietFilter}
+              affordability={affordability}
+              disabled={isBusy}
+              onTogglePreferred={toggleFood}
+              onApplyPreset={applyPreset}
+            />
 
             <p className="border-b border-white/5 pb-2 pt-2 text-xs font-bold uppercase tracking-wider text-white/40">
               Filters &amp; Tags

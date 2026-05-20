@@ -8,9 +8,11 @@ import {
   type DietFilter,
   type DietGoal,
   type PreferredFoodKey,
+  PREFERRED_FOOD_KEY_SET,
 } from "@/lib/diet-planner/constants";
 import { balancePlanToTargets } from "@/lib/diet-planner/balance-plan";
 import { buildFallbackDietPlan } from "@/lib/diet-planner/fallback-plan";
+import { formatFoodContextForAi } from "@/lib/diet-planner/meal-engine";
 import { parseDailyDietPlan } from "@/lib/diet-planner/parse-plan";
 import type { DailyDietPlan } from "@/lib/diet-planner/types";
 import {
@@ -25,7 +27,7 @@ import { createClient } from "@/utils/supabase/server";
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
 
 const VALID_GOALS = new Set(DIET_GOALS.map((g) => g.value));
-const VALID_FOODS = new Set(PREFERRED_FOODS.map((f) => f.key));
+const VALID_FOODS = PREFERRED_FOOD_KEY_SET;
 const VALID_AFFORDABILITY = new Set(AFFORDABILITY_OPTIONS.map((a) => a.value));
 
 function getOpenRouterModel() {
@@ -48,14 +50,27 @@ function buildPrompt(args: {
     .map((k) => PREFERRED_FOODS.find((f) => f.key === k)?.label ?? k)
     .join(", ");
 
+  const foodContext = formatFoodContextForAi(
+    args.foods,
+    args.affordability,
+    args.dietFilter,
+  );
+
+  const proteinSplit =
+    "Distribute protein: breakfast ~25%, lunch ~35%, dinner ~30%, snacks ~10%. Use realistic Indian portions.";
+
   return [
     "Generate a realistic ONE-DAY Indian meal plan as strict JSON only. No markdown.",
     `Goal: ${args.goal}`,
-    `Allowed foods ONLY (use these and nothing else): ${foodLabels}`,
+    `User-selected food keys (use ONLY these foods): ${foodLabels}`,
     `Diet filter: ${args.dietFilter === "veg" ? "vegetarian only" : "non-vegetarian allowed"}`,
-    `Indian food priority: ${args.indianPriority ? "yes — prefer Indian meals and portions" : "standard"}`,
-    `Affordability: ${args.affordability} — ${args.affordability === "budget" ? "low-cost staples" : args.affordability === "flexible" ? "premium options OK" : "balanced cost"}`,
+    `Indian food priority: ${args.indianPriority ? "yes — South/North Indian meals, regional portions" : "standard"}`,
+    `Affordability: ${args.affordability} — ${args.affordability === "budget" ? "prioritize budget staples (dal, rice, idli, eggs, poha)" : args.affordability === "flexible" ? "premium options OK" : "balanced cost"}`,
     `Daily calorie target ~${args.targets.dailyCalories} kcal, protein ~${args.targets.dailyProteinG}g.`,
+    proteinSplit,
+    "",
+    "Food database (macros per serving):",
+    ...foodContext,
     ...(args.wellnessLines.length > 0 ? ["", ...args.wellnessLines] : []),
     "",
     "Return exactly this JSON shape:",
@@ -186,7 +201,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (!plan) {
-      plan = buildFallbackDietPlan(preferredFoods, goal);
+      plan = buildFallbackDietPlan(preferredFoods, goal, {
+        dietFilter,
+        affordability,
+      });
       source = "fallback";
     }
 

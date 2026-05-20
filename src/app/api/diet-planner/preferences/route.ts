@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import {
   AFFORDABILITY_OPTIONS,
   DIET_GOALS,
-  PREFERRED_FOODS,
+  PREFERRED_FOOD_KEY_SET,
   type Affordability,
   type DietFilter,
   type DietGoal,
@@ -15,7 +15,7 @@ import {
 import { createClient } from "@/utils/supabase/server";
 
 const VALID_GOALS = new Set(DIET_GOALS.map((g) => g.value));
-const VALID_FOODS = new Set(PREFERRED_FOODS.map((f) => f.key));
+const VALID_FOODS = PREFERRED_FOOD_KEY_SET;
 const VALID_AFFORDABILITY = new Set(AFFORDABILITY_OPTIONS.map((a) => a.value));
 
 export async function GET() {
