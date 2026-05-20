@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Apple, Flame, Loader2, Plus, Trash2, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { INDIAN_FOODS, findIndianFoodByName } from "@/lib/foods/indian-foods";
 import { useToast } from "@/components/ui/toast";
 import { buildNutritionTargets } from "@/lib/meal-recommendations/nutrition-from-metrics";
 import type { Database } from "@/lib/supabase/types";
@@ -321,6 +322,16 @@ export function FoodLogSection({ metrics }: Props) {
     }
   }
 
+  function handleFoodNameChange(nextName: string) {
+    setFoodName(nextName);
+    const match = findIndianFoodByName(nextName);
+    if (!match) return;
+
+    setQuantity((current) => (current.trim() ? current : match.serving));
+    setCalories(String(match.calories));
+    setProteinG(String(match.proteinG));
+  }
+
   async function removeEntry(entryId: string) {
     try {
       setDeletingId(entryId);
@@ -412,7 +423,7 @@ export function FoodLogSection({ metrics }: Props) {
         onSubmit={addEntry}
         className="mt-6 rounded-lg border border-white/[0.07] bg-white/[0.03] p-4"
       >
-        <div className="grid gap-3 md:grid-cols-[0.9fr_1.2fr_1fr_0.75fr_0.75fr_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[0.9fr_1.2fr_1fr_0.75fr_0.75fr_auto] lg:items-end">
           <div className="space-y-2">
             <label
               htmlFor="food-meal-type"
@@ -437,8 +448,9 @@ export function FoodLogSection({ metrics }: Props) {
             id="food-name"
             label="Food"
             value={foodName}
-            onChange={(event) => setFoodName(event.target.value)}
-            placeholder="Greek yogurt bowl"
+            onChange={(event) => handleFoodNameChange(event.target.value)}
+            placeholder="Idli, Dal, Chicken Curry..."
+            list="indian-food-suggestions"
           />
           <Input
             id="food-quantity"
@@ -468,12 +480,19 @@ export function FoodLogSection({ metrics }: Props) {
             onChange={(event) => setProteinG(event.target.value)}
             placeholder="24"
           />
-          <Button type="submit" className="h-12" isLoading={isSaving}>
+          <Button type="submit" className="h-12 w-full lg:w-auto" isLoading={isSaving}>
             <Plus className="h-4 w-4" />
             Add
           </Button>
         </div>
       </form>
+      <datalist id="indian-food-suggestions">
+        {INDIAN_FOODS.map((food) => (
+          <option key={food.key} value={food.name}>
+            {food.serving} - {food.calories} kcal
+          </option>
+        ))}
+      </datalist>
 
       {error ? (
         <div className="mt-4 rounded-lg border border-red-300/15 bg-red-400/[0.06] px-4 py-3 text-sm font-semibold text-red-100">
@@ -504,7 +523,7 @@ export function FoodLogSection({ metrics }: Props) {
             </p>
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {MEALS.map((meal) => {
               const mealEntries = entriesByMeal[meal.value];
               const mealCalories = mealEntries.reduce(

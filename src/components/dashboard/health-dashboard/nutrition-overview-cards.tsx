@@ -508,7 +508,7 @@ export function NutritionOverviewCards({ metrics, isLoading = false }: Props) {
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={!targets.waterMl || hydrationBusy}
+                disabled={hydrationBusy}
                 onClick={() => saveHydration(hydrationMl + 250)}
                 className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/70 hover:bg-white/[0.07] disabled:opacity-50"
               >
@@ -516,7 +516,7 @@ export function NutritionOverviewCards({ metrics, isLoading = false }: Props) {
               </button>
               <button
                 type="button"
-                disabled={!targets.waterMl || hydrationBusy}
+                disabled={hydrationBusy}
                 onClick={() => saveHydration(Math.max(0, hydrationMl - 250))}
                 className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/70 hover:bg-white/[0.07] disabled:opacity-50"
               >
@@ -524,7 +524,7 @@ export function NutritionOverviewCards({ metrics, isLoading = false }: Props) {
               </button>
               <button
                 type="button"
-                disabled={!targets.waterMl || hydrationBusy}
+                disabled={hydrationBusy}
                 onClick={() => saveHydration(0)}
                 className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/70 hover:bg-white/[0.07] disabled:opacity-50"
               >

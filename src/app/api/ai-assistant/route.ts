@@ -170,7 +170,7 @@ async function enforceRateLimit(
       .eq("user_id", userId);
     return null;
   } catch {
-    return null;
+    return "Assistant is temporarily unavailable. Please try again in a minute.";
   }
 }
 
@@ -259,7 +259,8 @@ export async function POST(request: NextRequest) {
 
     const rateLimitError = await enforceRateLimit(supabase, user.id);
     if (rateLimitError) {
-      return Response.json({ error: rateLimitError }, { status: 429 });
+      const status = rateLimitError.startsWith("Rate limit reached") ? 429 : 503;
+      return Response.json({ error: rateLimitError }, { status });
     }
 
     const since = daysAgoKey(13);

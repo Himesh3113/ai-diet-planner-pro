@@ -29,8 +29,24 @@ function emptyChecklistState(
   >;
 }
 
+function mergeChecklistState(
+  ids: RoutineChecklistId[],
+  source: unknown,
+): Record<RoutineChecklistId, boolean> {
+  const next = emptyChecklistState(ids);
+  if (!source || typeof source !== "object") return next;
+  const parsed = source as Record<string, unknown>;
+  for (const id of ids) {
+    if (typeof parsed[id] === "boolean") {
+      next[id] = parsed[id];
+    }
+  }
+  return next;
+}
+
 export function DailyRoutineSection() {
   const [metrics, setMetrics] = useState<MetricsRow | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [checklist, setChecklist] = useState<Record<RoutineChecklistId, boolean>>(
@@ -39,9 +55,9 @@ export function DailyRoutineSection() {
   const skipNextPersistRef = useRef(false);
 
   const storageKey = useMemo(() => {
-    const uid = metrics?.user_id ?? "pending";
+    const uid = userId ?? "pending";
     return `dailyRoutine:${uid}:${todayKey()}`;
-  }, [metrics?.user_id]);
+  }, [userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +73,7 @@ export function DailyRoutineSection() {
         } = await supabase.auth.getUser();
         if (authErr) throw authErr;
         if (!user) throw new Error("Not authenticated");
+        setUserId(user.id);
 
         const { data, error: qErr } = await supabase
           .from("user_metrics")
@@ -85,38 +102,83 @@ export function DailyRoutineSection() {
   const plan = useMemo(() => buildDailyRoutine(metrics), [metrics]);
 
   useEffect(() => {
-    if (loadState !== "ready" || !metrics?.user_id) return;
+    if (loadState !== "ready" || !userId) return;
     const ids = plan.checklist.map((c) => c.id);
-    const next = emptyChecklistState(ids);
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Record<string, boolean>;
-        for (const id of ids) {
-          if (typeof parsed[id] === "boolean") next[id] = parsed[id];
+    const supabase = createClient();
+
+    async function loadChecklist() {
+      let next = emptyChecklistState(ids);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const db = supabase as any;
+        const { data, error: dbErr } = await db
+          .from("routine_checklist_logs")
+          .select("state")
+          .eq("user_id", userId)
+          .eq("logged_on", todayKey())
+          .maybeSingle();
+
+        if (!dbErr && data?.state) {
+          next = mergeChecklistState(ids, data.state);
+        } else {
+          const raw = window.localStorage.getItem(storageKey);
+          if (raw) {
+            next = mergeChecklistState(ids, JSON.parse(raw));
+          }
+        }
+      } catch {
+        try {
+          const raw = window.localStorage.getItem(storageKey);
+          if (raw) {
+            next = mergeChecklistState(ids, JSON.parse(raw));
+          }
+        } catch {
+          // ignore parse/storage failures
         }
       }
-    } catch {
-      // ignore
+
+      skipNextPersistRef.current = true;
+      queueMicrotask(() => {
+        setChecklist(next);
+      });
     }
-    skipNextPersistRef.current = true;
-    queueMicrotask(() => {
-      setChecklist(next);
-    });
-  }, [loadState, metrics?.user_id, storageKey, plan.checklist]);
+
+    void loadChecklist();
+  }, [loadState, userId, storageKey, plan.checklist]);
 
   useEffect(() => {
-    if (loadState !== "ready" || !metrics?.user_id || plan.checklist.length === 0) return;
+    if (loadState !== "ready" || !userId || plan.checklist.length === 0) return;
     if (skipNextPersistRef.current) {
       skipNextPersistRef.current = false;
       return;
     }
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify(checklist));
-    } catch {
-      // ignore
+
+    const supabase = createClient();
+
+    async function persistChecklist() {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const db = supabase as any;
+        await db.from("routine_checklist_logs").upsert(
+          {
+            user_id: userId,
+            logged_on: todayKey(),
+            state: checklist,
+          },
+          { onConflict: "user_id,logged_on" },
+        );
+      } catch {
+        // ignore; local fallback still preserves state on current device
+      }
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(checklist));
+      } catch {
+        // ignore local storage failures
+      }
     }
-  }, [checklist, loadState, metrics?.user_id, storageKey, plan.checklist.length]);
+
+    void persistChecklist();
+  }, [checklist, loadState, userId, storageKey, plan.checklist.length]);
 
   const onToggle = useCallback((id: RoutineChecklistId) => {
     setChecklist((prev) => ({ ...prev, [id]: !prev[id] }));
