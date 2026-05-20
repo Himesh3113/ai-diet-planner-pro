@@ -8,7 +8,10 @@ import {
   seedRecommendationsForCondition,
   upsertWellnessCondition,
 } from "@/lib/wellness/db";
-import { buildWellnessInsights, computeWellnessScores } from "@/lib/wellness/scoring";
+import { profilesForKeys } from "@/lib/wellness/condition-profiles";
+import { buildWellnessInsights } from "@/lib/wellness/insights";
+import { computeWellnessScores } from "@/lib/wellness/scoring";
+import { computeConditionRecoveryStats } from "@/lib/wellness/recovery-tracking";
 import type { WellnessSeverity, WellnessStatus } from "@/lib/wellness/types";
 import { createClient } from "@/utils/supabase/server";
 
@@ -60,10 +63,32 @@ export async function GET() {
     );
 
     const activeCount = data.conditions.filter((c) => c.status !== "recovered").length;
-    const insights = buildWellnessInsights({ scores, activeCount, trends });
+    const insights = buildWellnessInsights({
+      scores,
+      activeCount,
+      trends,
+      conditions: data.conditions,
+    });
+
+    const profileKeys = [...new Set(data.conditions.map((c) => c.condition_key))];
+    const profiles = profilesForKeys(profileKeys);
+
+    const recoveryStats = Object.fromEntries(
+      data.conditions.map((c) => [
+        c.id,
+        computeConditionRecoveryStats(
+          c.id,
+          data.progress,
+          data.logs,
+          c.recovery_progress,
+          c.status,
+        ),
+      ]),
+    );
 
     return Response.json({
       catalog: WELLNESS_CATALOG,
+      profiles,
       conditions: data.conditions,
       logs: data.logs,
       recommendations: data.recommendations,
@@ -71,6 +96,7 @@ export async function GET() {
       trends,
       scores,
       insights,
+      recoveryStats,
     });
   } catch (error) {
     const message =

@@ -1,4 +1,4 @@
-import { WELLNESS_CATALOG_BY_KEY } from "./catalog";
+import { getConditionProfile } from "./condition-profiles";
 
 type ActiveCondition = {
   condition_key: string;
@@ -19,24 +19,26 @@ export function buildWellnessDietContext(conditions: ActiveCondition[]): string[
   const prefer = new Set<string>();
 
   for (const row of active) {
-    const meta = WELLNESS_CATALOG_BY_KEY[row.condition_key];
-    if (!meta) continue;
-    lines.push(`- ${meta.title} (${row.severity}, ${row.status})`);
-    meta.dietPromptRules.forEach((r) => rules.add(r));
-    meta.foodsToAvoid.forEach((f) => avoid.add(f));
-    meta.suggestedFoods.slice(0, 4).forEach((f) => prefer.add(f));
+    const profile = getConditionProfile(row.condition_key);
+    if (!profile) continue;
+    lines.push(`- ${profile.title} (${row.severity}, ${row.status})`);
+    profile.dietPromptRules.forEach((r) => rules.add(r));
+    profile.foodsToAvoid.forEach((f) => avoid.add(f.name));
+    profile.recommendedFoods.slice(0, 5).forEach((f) => prefer.add(f.name));
   }
 
   if (rules.size > 0) {
     lines.push("Wellness meal rules:");
-    [...rules].slice(0, 12).forEach((r) => lines.push(`• ${r}`));
+    [...rules].slice(0, 14).forEach((r) => lines.push(`• ${r}`));
   }
   if (avoid.size > 0) {
-    lines.push(`Reduce or avoid when possible: ${[...avoid].slice(0, 10).join(", ")}.`);
+    lines.push(`STRICTLY reduce or avoid: ${[...avoid].slice(0, 12).join(", ")}.`);
   }
   if (prefer.size > 0) {
-    lines.push(`Prefer when compatible with selected foods: ${[...prefer].slice(0, 10).join(", ")}.`);
+    lines.push(`Prefer when compatible with user's selected foods: ${[...prefer].slice(0, 12).join(", ")}.`);
   }
+
+  lines.push("Balance macros realistically; distribute protein across meals; use Indian portions.");
 
   return lines;
 }

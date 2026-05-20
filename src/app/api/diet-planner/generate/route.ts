@@ -9,6 +9,7 @@ import {
   type DietGoal,
   type PreferredFoodKey,
 } from "@/lib/diet-planner/constants";
+import { balancePlanToTargets } from "@/lib/diet-planner/balance-plan";
 import { buildFallbackDietPlan } from "@/lib/diet-planner/fallback-plan";
 import { parseDailyDietPlan } from "@/lib/diet-planner/parse-plan";
 import type { DailyDietPlan } from "@/lib/diet-planner/types";
@@ -93,7 +94,7 @@ async function callOpenRouter(prompt: string, model: string): Promise<string | n
         {
           role: "system",
           content:
-            "You are an expert Indian nutrition coach. Reply with valid JSON only. Never include foods not in the user's allowed list.",
+            "You are an expert Indian nutrition coach. Reply with valid JSON only. Never include foods not in the user's allowed list. Respect wellness avoid-list strictly. Use realistic Indian portions and accurate macro estimates.",
         },
         { role: "user", content: prompt },
       ],
@@ -188,6 +189,12 @@ export async function POST(request: NextRequest) {
       plan = buildFallbackDietPlan(preferredFoods, goal);
       source = "fallback";
     }
+
+    plan = balancePlanToTargets(
+      plan,
+      targets.dailyCalories ?? 2200,
+      targets.dailyProteinG ?? 120,
+    );
 
     await upsertUserDietPreferences(supabase, {
       userId: user.id,

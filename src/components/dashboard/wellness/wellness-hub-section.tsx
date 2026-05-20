@@ -19,9 +19,12 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { getConditionProfile } from "@/lib/wellness/condition-profiles";
 import { WELLNESS_CATALOG_BY_KEY } from "@/lib/wellness/catalog";
 import type { WellnessConditionRow } from "@/lib/wellness/db";
 import type {
+  ConditionRecoveryStats,
+  WellnessConditionProfile,
   WellnessFilter,
   WellnessInsight,
   WellnessScores,
@@ -30,6 +33,7 @@ import type {
   WellnessTrendPoint,
 } from "@/lib/wellness/types";
 import { cn } from "@/lib/utils";
+import { WellnessHubDetailModal } from "./wellness-hub-detail-modal";
 import { WellnessScoreRing } from "./wellness-score-ring";
 import { WellnessTrendCharts } from "./wellness-trend-charts";
 
@@ -63,8 +67,10 @@ const CATEGORY_ICON = {
 
 type HubPayload = {
   conditions: WellnessConditionRow[];
+  profiles?: Record<string, WellnessConditionProfile>;
   scores: WellnessScores;
   insights: WellnessInsight[];
+  recoveryStats?: Record<string, ConditionRecoveryStats>;
   trends: {
     hydration: WellnessTrendPoint[];
     sleep: WellnessTrendPoint[];
@@ -109,6 +115,7 @@ export function WellnessHubSection() {
   const [formSymptoms, setFormSymptoms] = useState("");
   const [formNotes, setFormNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [detailRow, setDetailRow] = useState<WellnessConditionRow | null>(null);
   const loadId = useRef(0);
 
   const loadHub = useCallback(async () => {
@@ -128,8 +135,10 @@ export function WellnessHubSection() {
       if (!res.ok) throw new Error(json.error ?? "Failed to load Wellness Hub.");
       setData({
         conditions: json.conditions ?? [],
+        profiles: json.profiles,
         scores: json.scores,
         insights: json.insights ?? [],
+        recoveryStats: json.recoveryStats,
         trends: json.trends ?? {
           hydration: [],
           sleep: [],
@@ -166,16 +175,6 @@ export function WellnessHubSection() {
     () => (data?.conditions ?? []).filter((c) => matchesFilter(c, filter)),
     [data?.conditions, filter],
   );
-
-  const recsByCondition = useMemo(() => {
-    const map = new Map<string, HubPayload["recommendations"]>();
-    for (const r of data?.recommendations ?? []) {
-      const list = map.get(r.wellness_condition_id) ?? [];
-      list.push(r);
-      map.set(r.wellness_condition_id, list);
-    }
-    return map;
-  }, [data?.recommendations]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -285,6 +284,25 @@ export function WellnessHubSection() {
 
   return (
     <div className="space-y-8">
+      {detailRow && (
+        <WellnessHubDetailModal
+          row={detailRow}
+          recovery={data?.recoveryStats?.[detailRow.id]}
+          onClose={() => setDetailRow(null)}
+          onEdit={() => {
+            openEdit(detailRow);
+            setDetailRow(null);
+          }}
+          onRecovered={() => {
+            void handleAction("recovered", detailRow.id);
+            setDetailRow(null);
+          }}
+          onDelete={() => {
+            void handleAction("delete", detailRow.id);
+            setDetailRow(null);
+          }}
+        />
+      )}
       {/* Hero scores */}
       <section className="glass relative overflow-hidden rounded-lg border border-white/[0.08] p-6">
         <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-brand-neon/10 blur-3xl" />
@@ -488,16 +506,27 @@ export function WellnessHubSection() {
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {filtered.map((row, index) => {
+            const profile =
+              data?.profiles?.[row.condition_key] ?? getConditionProfile(row.condition_key);
             const meta = WELLNESS_CATALOG_BY_KEY[row.condition_key];
-            const Icon = CATEGORY_ICON[meta?.category ?? "recovery"] ?? HeartPulse;
-            const recs = recsByCondition.get(row.id) ?? [];
+            const Icon = CATEGORY_ICON[profile?.category ?? meta?.category ?? "recovery"] ?? HeartPulse;
+            const recovery = data?.recoveryStats?.[row.id];
             return (
               <motion.article
                 key={row.id}
+                role="button"
+                tabIndex={0}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.04 }}
-                className="glass group rounded-lg border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-transparent p-5"
+                onClick={() => setDetailRow(row)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDetailRow(row);
+                  }
+                }}
+                className="glass group cursor-pointer rounded-lg border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-transparent p-5 transition hover:border-brand-neon/30 hover:shadow-[0_0_24px_rgba(57,255,20,0.08)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex gap-3">
@@ -506,10 +535,10 @@ export function WellnessHubSection() {
                     </div>
                     <div>
                       <h3 className="text-base font-black text-white">
-                        {meta?.title ?? row.condition_key}
+                        {profile?.title ?? meta?.title ?? row.condition_key}
                       </h3>
-                      <p className="mt-1 text-xs text-white/45">
-                        {meta?.summary}
+                      <p className="mt-1 line-clamp-2 text-xs text-white/45">
+                        {profile?.overview ?? meta?.summary}
                       </p>
                     </div>
                   </div>
@@ -530,6 +559,11 @@ export function WellnessHubSection() {
                   <span className="rounded-full border border-white/10 px-2 py-0.5">
                     Updated {new Date(row.updated_at).toLocaleDateString()}
                   </span>
+                  {(recovery?.streakDays ?? 0) > 0 && (
+                    <span className="rounded-full border border-brand-neon/30 bg-brand-neon/10 px-2 py-0.5 text-brand-neon">
+                      {recovery?.streakDays}d streak
+                    </span>
+                  )}
                 </div>
 
                 {/* Recovery ring */}
@@ -584,40 +618,28 @@ export function WellnessHubSection() {
                   </p>
                 )}
 
-                {meta && (
+                {profile && (
                   <div className="mt-4 space-y-2 text-xs">
-                    <p>
-                      <span className="font-bold text-brand-neon">Eat:</span>{" "}
-                      {meta.suggestedFoods.slice(0, 5).join(" · ")}
+                    <p className="line-clamp-2 text-white/50">
+                      {profile.aiInsights[0]}
                     </p>
                     <p>
-                      <span className="font-bold text-red-300/90">Avoid:</span>{" "}
-                      {meta.foodsToAvoid.slice(0, 4).join(" · ")}
+                      <span className="font-bold text-brand-neon">Top foods:</span>{" "}
+                      {profile.recommendedFoods
+                        .slice(0, 4)
+                        .map((f) => f.name)
+                        .join(" · ")}
                     </p>
-                    <p>
-                      <span className="font-bold text-white/60">Move:</span>{" "}
-                      {meta.recommendedExercises.slice(0, 2).join(" · ")}
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                      Tap for full profile, supplements & recovery charts →
                     </p>
                   </div>
                 )}
 
-                {recs.length > 0 && (
-                  <div className="mt-4 rounded-lg border border-brand-neon/15 bg-brand-neon/5 p-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-neon">
-                      AI recommendations
-                    </p>
-                    <ul className="mt-2 space-y-1 text-xs text-white/65">
-                      {recs.slice(0, 3).map((r) => (
-                        <li key={r.id}>
-                          <span className="font-semibold text-white/80">{r.title}:</span>{" "}
-                          {r.content}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-white/5 pt-4">
+                <div
+                  className="mt-4 flex flex-wrap gap-2 border-t border-white/5 pt-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Button variant="ghost" className="h-8 px-2 text-xs" onClick={() => openEdit(row)}>
                     <Pencil className="mr-1 h-3 w-3" />
                     Edit

@@ -1,7 +1,8 @@
 import type { Json } from "@/lib/supabase/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
-import { getCatalogEntry, WELLNESS_CATALOG_BY_KEY } from "./catalog";
+import { getCatalogEntry } from "./catalog";
+import { getConditionProfile } from "./condition-profiles";
 import type { WellnessSeverity, WellnessStatus } from "./types";
 
 export type WellnessConditionRow =
@@ -201,45 +202,93 @@ export async function seedRecommendationsForCondition(
   conditionId: string,
   conditionKey: string,
 ) {
-  const meta = WELLNESS_CATALOG_BY_KEY[conditionKey];
-  if (!meta) return;
+  const profile = getConditionProfile(conditionKey);
+  if (!profile) return;
+
+  await supabase
+    .from("wellness_recommendations")
+    .delete()
+    .eq("wellness_condition_id", conditionId)
+    .eq("user_id", userId);
+
+  const foodLines = profile.recommendedFoods
+    .map((f) => `${f.name}: ${f.whyItHelps}`)
+    .join(" | ");
+  const avoidLines = profile.foodsToAvoid.map((f) => `${f.name} — ${f.reason}`).join(" | ");
+  const suppLines = profile.supplements
+    .map((s) => `${s.name} (${s.timing}): ${s.benefits}`)
+    .join(" | ");
 
   const rows = [
     {
       user_id: userId,
       wellness_condition_id: conditionId,
+      category: "overview",
+      title: "Condition overview",
+      content: profile.overview,
+      priority: 12,
+    },
+    {
+      user_id: userId,
+      wellness_condition_id: conditionId,
       category: "nutrition",
-      title: "Nutrition focus",
-      content: meta.aiRecommendations[0] ?? meta.summary,
+      title: "Recommended foods (7)",
+      content: foodLines,
       priority: 10,
     },
     {
       user_id: userId,
       wellness_condition_id: conditionId,
-      category: "foods",
-      title: "Suggested foods",
-      content: meta.suggestedFoods.join(", "),
+      category: "avoid",
+      title: "Foods to avoid",
+      content: avoidLines,
+      priority: 9,
+    },
+    {
+      user_id: userId,
+      wellness_condition_id: conditionId,
+      category: "supplement",
+      title: "Supplement guidance",
+      content: suppLines,
       priority: 8,
+    },
+    {
+      user_id: userId,
+      wellness_condition_id: conditionId,
+      category: "routine",
+      title: "Daily wellness routine",
+      content: profile.dailyRoutine
+        .map((r) => `${r.period}: ${r.items.join("; ")}`)
+        .join(" || "),
+      priority: 7,
     },
     {
       user_id: userId,
       wellness_condition_id: conditionId,
       category: "exercise",
       title: "Movement",
-      content: meta.recommendedExercises.join(" · "),
+      content: profile.recommendedExercises.join(" · "),
       priority: 6,
     },
-    {
+    ...profile.aiInsights.slice(0, 3).map((msg, i) => ({
       user_id: userId,
       wellness_condition_id: conditionId,
-      category: "supplement",
-      title: "Supplements",
-      content: meta.supplementSuggestions.join(" · "),
-      priority: 4,
-    },
+      category: "insight",
+      title: "AI insight",
+      content: msg,
+      priority: 5 - i,
+    })),
   ];
 
   await supabase.from("wellness_recommendations").insert(rows);
+
+  await supabase.from("wellness_logs").insert({
+    user_id: userId,
+    wellness_condition_id: conditionId,
+    log_type: "milestone",
+    message: `Detailed wellness profile generated for ${profile.title}`,
+    metadata: { conditionKey, profileTitle: profile.title } as Json,
+  });
 }
 
 export async function recordRecoverySnapshot(
