@@ -9,7 +9,6 @@ import { useToast } from "@/components/ui/toast";
 import { buildNutritionTargets } from "@/lib/meal-recommendations/nutrition-from-metrics";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/client";
-import { useToast } from "@/components/ui/toast";
 
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
 type FoodEntry = Database["public"]["Tables"]["food_logs"]["Row"];

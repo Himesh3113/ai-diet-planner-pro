@@ -464,3 +464,231 @@ create policy "Users can insert their own assistant rate limits." on public.ai_a
 
 create policy "Users can update their own assistant rate limits." on public.ai_assistant_rate_limits
   for update using (auth.uid() = user_id);
+
+
+-- 13. Workout Plans
+create table if not exists public.workout_plans (
+  user_id uuid references public.profiles(id) on delete cascade not null primary key,
+  difficulty text check (difficulty in ('beginner', 'intermediate', 'advanced')) not null,
+  mode text check (mode in ('home', 'gym')) not null,
+  weekly_schedule jsonb not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger where tgname = 'workout_plans_set_updated_at'
+  ) then
+    create trigger workout_plans_set_updated_at
+      before update on public.workout_plans
+      for each row execute procedure public.set_updated_at();
+  end if;
+end $$;
+
+alter table public.workout_plans enable row level security;
+
+drop policy if exists "Users can view their own workout plans." on public.workout_plans;
+drop policy if exists "Users can insert their own workout plans." on public.workout_plans;
+drop policy if exists "Users can update their own workout plans." on public.workout_plans;
+
+create policy "Users can view their own workout plans." on public.workout_plans
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own workout plans." on public.workout_plans
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own workout plans." on public.workout_plans
+  for update using (auth.uid() = user_id);
+
+
+-- 14. Sleep Logs
+create table if not exists public.sleep_logs (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  logged_on date not null default current_date,
+  duration_hours numeric not null check (duration_hours >= 0 and duration_hours <= 24),
+  quality_score integer not null check (quality_score >= 1 and quality_score <= 10),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique (user_id, logged_on)
+);
+
+create index if not exists sleep_logs_user_logged_on_idx
+  on public.sleep_logs (user_id, logged_on desc);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger where tgname = 'sleep_logs_set_updated_at'
+  ) then
+    create trigger sleep_logs_set_updated_at
+      before update on public.sleep_logs
+      for each row execute procedure public.set_updated_at();
+  end if;
+end $$;
+
+alter table public.sleep_logs enable row level security;
+
+drop policy if exists "Users can view their own sleep logs." on public.sleep_logs;
+drop policy if exists "Users can insert their own sleep logs." on public.sleep_logs;
+drop policy if exists "Users can update their own sleep logs." on public.sleep_logs;
+drop policy if exists "Users can delete their own sleep logs." on public.sleep_logs;
+
+create policy "Users can view their own sleep logs." on public.sleep_logs
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own sleep logs." on public.sleep_logs
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own sleep logs." on public.sleep_logs
+  for update using (auth.uid() = user_id);
+
+create policy "Users can delete their own sleep logs." on public.sleep_logs
+  for delete using (auth.uid() = user_id);
+
+
+-- 15. Alter food_logs to support image_url
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'food_logs'
+      and column_name = 'image_url'
+  ) then
+    alter table public.food_logs add column image_url text;
+  end if;
+end $$;
+
+
+-- 16. Workout Sessions
+create table if not exists public.workout_sessions (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  logged_on date not null default current_date,
+  workout_name text not null,
+  duration_minutes integer not null check (duration_minutes > 0),
+  calories_burned integer check (calories_burned >= 0),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists workout_sessions_user_logged_on_idx
+  on public.workout_sessions (user_id, logged_on desc);
+
+alter table public.workout_sessions enable row level security;
+
+drop policy if exists "Users can view their own workout sessions." on public.workout_sessions;
+drop policy if exists "Users can insert their own workout sessions." on public.workout_sessions;
+drop policy if exists "Users can update their own workout sessions." on public.workout_sessions;
+drop policy if exists "Users can delete their own workout sessions." on public.workout_sessions;
+
+create policy "Users can view their own workout sessions." on public.workout_sessions
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own workout sessions." on public.workout_sessions
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own workout sessions." on public.workout_sessions
+  for update using (auth.uid() = user_id);
+
+create policy "Users can delete their own workout sessions." on public.workout_sessions
+  for delete using (auth.uid() = user_id);
+
+
+-- 17. AI Chat History
+create table if not exists public.ai_chat_history (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  role text check (role in ('user', 'assistant')) not null,
+  content text not null,
+  model text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists ai_chat_history_user_created_at_idx
+  on public.ai_chat_history (user_id, created_at asc);
+
+alter table public.ai_chat_history enable row level security;
+
+drop policy if exists "Users can view their own chat history." on public.ai_chat_history;
+drop policy if exists "Users can insert their own chat history." on public.ai_chat_history;
+drop policy if exists "Users can update their own chat history." on public.ai_chat_history;
+drop policy if exists "Users can delete their own chat history." on public.ai_chat_history;
+
+create policy "Users can view their own chat history." on public.ai_chat_history
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own chat history." on public.ai_chat_history
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own chat history." on public.ai_chat_history
+  for update using (auth.uid() = user_id);
+
+create policy "Users can delete their own chat history." on public.ai_chat_history
+  for delete using (auth.uid() = user_id);
+
+
+-- 18. Food Images
+create table if not exists public.food_images (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  food_log_id uuid references public.food_logs(id) on delete cascade,
+  image_url text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.food_images enable row level security;
+
+drop policy if exists "Users can view their own food images." on public.food_images;
+drop policy if exists "Users can insert their own food images." on public.food_images;
+drop policy if exists "Users can update their own food images." on public.food_images;
+drop policy if exists "Users can delete their own food images." on public.food_images;
+
+create policy "Users can view their own food images." on public.food_images
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own food images." on public.food_images
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own food images." on public.food_images
+  for update using (auth.uid() = user_id);
+
+create policy "Users can delete their own food images." on public.food_images
+  for delete using (auth.uid() = user_id);
+
+-- 19. Diet Planner Preferences (personalized meal plans)
+create table if not exists public.diet_planner_preferences (
+  user_id uuid references public.profiles(id) on delete cascade not null primary key,
+  goal text not null check (
+    goal in ('bulking', 'fat_loss', 'lean_bulk', 'weight_gain', 'maintenance')
+  ),
+  preferred_foods text[] not null default '{}',
+  diet_filter text not null default 'veg' check (diet_filter in ('veg', 'non_veg')),
+  indian_food_priority boolean not null default true,
+  affordability text not null default 'moderate' check (
+    affordability in ('budget', 'moderate', 'flexible')
+  ),
+  generated_plan jsonb,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.diet_planner_preferences enable row level security;
+
+drop policy if exists "Users can view their own diet planner preferences." on public.diet_planner_preferences;
+drop policy if exists "Users can insert their own diet planner preferences." on public.diet_planner_preferences;
+drop policy if exists "Users can update their own diet planner preferences." on public.diet_planner_preferences;
+
+create policy "Users can view their own diet planner preferences." on public.diet_planner_preferences
+  for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own diet planner preferences." on public.diet_planner_preferences
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own diet planner preferences." on public.diet_planner_preferences
+  for update using (auth.uid() = user_id);
+

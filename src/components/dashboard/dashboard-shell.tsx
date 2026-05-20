@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
   Bell,
+  ChefHat,
   CalendarDays,
   ClipboardList,
   LayoutDashboard,
@@ -31,6 +32,7 @@ export type DashboardUser = {
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/dashboard/diet-planner", icon: ChefHat, label: "Diet Planner" },
   { href: "/onboarding", icon: ClipboardList, label: "Onboarding" },
   { href: "/profile", icon: User, label: "Profile" },
   { href: "#activity", icon: Activity, label: "Activity" },
@@ -127,6 +129,7 @@ export function DashboardShell({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -213,7 +216,9 @@ export function DashboardShell({
                   Phase 2
                 </p>
                 <h1 className="text-lg font-black tracking-tight text-white sm:text-xl">
-                  Profile Dashboard
+                  {pathname === "/dashboard/diet-planner"
+                    ? "Diet Planner"
+                    : "Profile Dashboard"}
                 </h1>
               </div>
             </div>

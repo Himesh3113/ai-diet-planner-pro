@@ -564,6 +564,88 @@ export type Database = {
           },
         ];
       };
+
+      diet_planner_preferences: {
+        Row: {
+          user_id: string;
+          goal: "bulking" | "fat_loss" | "lean_bulk" | "weight_gain" | "maintenance";
+          preferred_foods: string[];
+          diet_filter: "veg" | "non_veg";
+          indian_food_priority: boolean;
+          affordability: "budget" | "moderate" | "flexible";
+          generated_plan: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          goal: "bulking" | "fat_loss" | "lean_bulk" | "weight_gain" | "maintenance";
+          preferred_foods?: string[];
+          diet_filter?: "veg" | "non_veg";
+          indian_food_priority?: boolean;
+          affordability?: "budget" | "moderate" | "flexible";
+          generated_plan?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          goal?: "bulking" | "fat_loss" | "lean_bulk" | "weight_gain" | "maintenance";
+          preferred_foods?: string[];
+          diet_filter?: "veg" | "non_veg";
+          indian_food_priority?: boolean;
+          affordability?: "budget" | "moderate" | "flexible";
+          generated_plan?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "diet_planner_preferences_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+        ];
+      };
+
+      food_images: {
+        Row: {
+          id: string;
+          user_id: string;
+          food_log_id: string | null;
+          image_url: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          food_log_id?: string | null;
+          image_url: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          food_log_id?: string | null;
+          image_url?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "food_images_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "profiles";
+          },
+          {
+            columns: ["food_log_id"];
+            foreignKeyName: "food_images_food_log_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "food_logs";
+          }
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
