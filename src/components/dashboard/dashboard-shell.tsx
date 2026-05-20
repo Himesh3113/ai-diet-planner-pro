@@ -2,13 +2,14 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
   Bell,
   ChefHat,
   CalendarDays,
   Dumbbell,
+  HeartPulse,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -35,6 +36,7 @@ export type DashboardUser = {
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/dashboard/diet-planner", icon: ChefHat, label: "Diet Planner" },
+  { href: "/dashboard/wellness-hub", icon: HeartPulse, label: "Wellness Hub" },
   { href: "/dashboard/activity", icon: Activity, label: "Activity" },
   { href: "/dashboard/workout", icon: Dumbbell, label: "Workout" },
   { href: "/dashboard/sleep", icon: Moon, label: "Sleep" },
@@ -47,11 +49,12 @@ const navItems = [
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Overview",
   "/dashboard/diet-planner": "Diet Planner",
+  "/dashboard/wellness-hub": "Wellness Hub",
   "/dashboard/activity": "Activity",
-  "/dashboard/workout": "Workout Planner",
-  "/dashboard/sleep": "Sleep & Recovery",
-  "/dashboard/analytics": "Analytics Hub",
-  "/dashboard/profile": "Profile Settings",
+  "/dashboard/workout": "Workout",
+  "/dashboard/sleep": "Sleep",
+  "/dashboard/analytics": "Analytics",
+  "/dashboard/profile": "Profile",
   "/dashboard/settings": "Settings",
   "/dashboard/schedule": "Schedule",
   "/dashboard/nutrition": "Nutrition",
@@ -151,7 +154,9 @@ export function DashboardShell({
   const [isSigningOut, setIsSigningOut] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+  const showDev = searchParams.get("dev") === "true";
 
   const pageTitle = PAGE_TITLES[pathname] ?? "Dashboard";
 
@@ -234,9 +239,15 @@ export function DashboardShell({
                 <Menu className="h-5 w-5" />
               </button>
               <div>
-                <p className="text-sm font-bold uppercase tracking-[0.2em] text-brand-neon">
-                  Phase 2
-                </p>
+                {showDev ? (
+                  <p className="text-sm font-bold uppercase tracking-[0.2em] text-brand-neon">
+                    Dev mode
+                  </p>
+                ) : (
+                  <p className="text-sm font-bold uppercase tracking-[0.2em] text-white/35">
+                    AI Wellness Platform
+                  </p>
+                )}
                 <h1 className="text-lg font-black tracking-tight text-white sm:text-xl">
                   {pageTitle}
                 </h1>

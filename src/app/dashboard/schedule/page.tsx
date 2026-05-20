@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { DailyRoutineSection } from "@/components/dashboard/health-dashboard/daily-routine-section";
-import { HealthConditionsSection } from "@/components/dashboard/health-dashboard/health-conditions-section";
+import { HeartPulse } from "lucide-react";
 
 export default function SchedulePage() {
   return (
@@ -17,7 +18,21 @@ export default function SchedulePage() {
       </div>
 
       <DailyRoutineSection />
-      <HealthConditionsSection />
+
+      <Link
+        href="/dashboard/wellness-hub"
+        className="glass flex items-center gap-4 rounded-lg border border-brand-neon/20 bg-brand-neon/5 p-5 transition hover:border-brand-neon/40"
+      >
+        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-neon/15 text-brand-neon">
+          <HeartPulse className="h-6 w-6" />
+        </div>
+        <div>
+          <p className="text-sm font-black text-white">Wellness Hub</p>
+          <p className="mt-1 text-xs text-white/50">
+            Track conditions, recovery, and AI-personalized guidance across diet, sleep, and training.
+          </p>
+        </div>
+      </Link>
     </div>
   );
 }

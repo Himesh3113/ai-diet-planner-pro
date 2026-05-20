@@ -799,6 +799,218 @@ export type Database = {
         ];
       };
 
+      wellness_conditions: {
+        Row: {
+          id: string;
+          user_id: string;
+          condition_key: string;
+          severity: "mild" | "moderate" | "severe";
+          status: "monitoring" | "improving" | "stable" | "critical" | "recovered";
+          symptoms: string[];
+          notes: string | null;
+          hydration_target_ml: number;
+          sleep_target_hours: number;
+          recovery_progress: number;
+          stress_impact: number;
+          energy_impact: number;
+          skin_impact: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          condition_key: string;
+          severity?: "mild" | "moderate" | "severe";
+          status?: "monitoring" | "improving" | "stable" | "critical" | "recovered";
+          symptoms?: string[];
+          notes?: string | null;
+          hydration_target_ml?: number;
+          sleep_target_hours?: number;
+          recovery_progress?: number;
+          stress_impact?: number;
+          energy_impact?: number;
+          skin_impact?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          condition_key?: string;
+          severity?: "mild" | "moderate" | "severe";
+          status?: "monitoring" | "improving" | "stable" | "critical" | "recovered";
+          symptoms?: string[];
+          notes?: string | null;
+          hydration_target_ml?: number;
+          sleep_target_hours?: number;
+          recovery_progress?: number;
+          stress_impact?: number;
+          energy_impact?: number;
+          skin_impact?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "wellness_conditions_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "users";
+          },
+        ];
+      };
+
+      wellness_logs: {
+        Row: {
+          id: string;
+          user_id: string;
+          wellness_condition_id: string | null;
+          log_type: "symptom" | "note" | "milestone" | "progress";
+          message: string;
+          metadata: Json | null;
+          logged_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          wellness_condition_id?: string | null;
+          log_type?: "symptom" | "note" | "milestone" | "progress";
+          message: string;
+          metadata?: Json | null;
+          logged_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          wellness_condition_id?: string | null;
+          log_type?: "symptom" | "note" | "milestone" | "progress";
+          message?: string;
+          metadata?: Json | null;
+          logged_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "wellness_logs_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "users";
+          },
+          {
+            columns: ["wellness_condition_id"];
+            foreignKeyName: "wellness_logs_wellness_condition_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "wellness_conditions";
+          },
+        ];
+      };
+
+      wellness_recommendations: {
+        Row: {
+          id: string;
+          user_id: string;
+          wellness_condition_id: string;
+          category: string;
+          title: string;
+          content: string;
+          priority: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          wellness_condition_id: string;
+          category?: string;
+          title: string;
+          content: string;
+          priority?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          wellness_condition_id?: string;
+          category?: string;
+          title?: string;
+          content?: string;
+          priority?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "wellness_recommendations_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "users";
+          },
+          {
+            columns: ["wellness_condition_id"];
+            foreignKeyName: "wellness_recommendations_wellness_condition_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "wellness_conditions";
+          },
+        ];
+      };
+
+      recovery_progress: {
+        Row: {
+          id: string;
+          user_id: string;
+          wellness_condition_id: string;
+          recovery_score: number;
+          energy_score: number;
+          sleep_score: number;
+          skin_score: number;
+          nutrition_score: number;
+          stress_score: number;
+          notes: string | null;
+          recorded_on: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          wellness_condition_id: string;
+          recovery_score?: number;
+          energy_score?: number;
+          sleep_score?: number;
+          skin_score?: number;
+          nutrition_score?: number;
+          stress_score?: number;
+          notes?: string | null;
+          recorded_on?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          wellness_condition_id?: string;
+          recovery_score?: number;
+          energy_score?: number;
+          sleep_score?: number;
+          skin_score?: number;
+          nutrition_score?: number;
+          stress_score?: number;
+          notes?: string | null;
+          recorded_on?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ["user_id"];
+            foreignKeyName: "recovery_progress_user_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "users";
+          },
+          {
+            columns: ["wellness_condition_id"];
+            foreignKeyName: "recovery_progress_wellness_condition_id_fkey";
+            referencedColumns: ["id"];
+            referencedRelation: "wellness_conditions";
+          },
+        ];
+      };
+
       food_images: {
         Row: {
           id: string;

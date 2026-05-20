@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { buildNutritionTargets } from "@/lib/meal-recommendations/nutrition-from-metrics";
-import { contextFromMetrics } from "@/lib/ai-assistant/context-from-metrics";
+import { WELLNESS_CATALOG_BY_KEY } from "@/lib/wellness/catalog";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/server";
 
@@ -55,9 +55,12 @@ function recentFoodSummary(entries: FoodEntry[]) {
 }
 
 // Helper to build a concise context string for the AI assistant
+type WellnessRow = Database["public"]["Tables"]["wellness_conditions"]["Row"];
+
 function buildContext(args: {
   metrics: MetricsRow | null;
   notes: HealthNote[];
+  wellness: WellnessRow[];
   foodEntries: FoodEntry[];
   hydrationLogs: HydrationLog[];
 }) {
@@ -98,6 +101,17 @@ function buildContext(args: {
       })),
     })}`,
     `Health notes: ${JSON.stringify(notesByCondition)}`,
+    `Wellness Hub (active conditions): ${JSON.stringify(
+      args.wellness
+        .filter((w) => w.status !== "recovered")
+        .map((w) => ({
+          key: w.condition_key,
+          title: WELLNESS_CATALOG_BY_KEY[w.condition_key]?.title ?? w.condition_key,
+          status: w.status,
+          severity: w.severity,
+          symptoms: w.symptoms,
+        })),
+    )}`,
   ].join("\n");
 }
 
@@ -330,11 +344,17 @@ export async function POST(request: NextRequest) {
             (row) => typeof row.logged_on === "string",
           );
 
+    const { data: wellnessRaw } = await db
+      .from("wellness_conditions")
+      .select("*")
+      .eq("user_id", user.id);
+    const wellness: WellnessRow[] = wellnessRaw ?? [];
+
     const model = getOpenRouterModel();
-    // Build a concise context for the AI using the fetched data
     const context = buildContext({
       metrics: metrics ?? null,
       notes,
+      wellness,
       foodEntries: foods ?? [],
       hydrationLogs,
     });

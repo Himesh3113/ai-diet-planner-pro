@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { DashboardShell, type DashboardUser } from "@/components/dashboard/dashboard-shell";
 import { getProtectedProfileContext } from "@/lib/profile";
@@ -22,5 +23,9 @@ export default async function DashboardLayout({
     role: profile?.role ?? "user",
   };
 
-  return <DashboardShell user={dashboardUser}>{children}</DashboardShell>;
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <DashboardShell user={dashboardUser}>{children}</DashboardShell>
+    </Suspense>
+  );
 }

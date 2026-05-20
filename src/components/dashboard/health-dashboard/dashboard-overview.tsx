@@ -10,6 +10,7 @@ import {
   Droplets,
   Dumbbell,
   Flame,
+  HeartPulse,
   Loader2,
   Moon,
   Scale,
@@ -463,6 +464,16 @@ export function DashboardOverview({
                   <ChefHat className="h-5 w-5" />
                 </div>
                 <span className="text-xs font-bold text-white">Diet Planner</span>
+              </Link>
+
+              <Link
+                href="/dashboard/wellness-hub"
+                className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] text-center hover:bg-white/[0.06] hover:border-white/[0.1] hover:scale-102 transition group"
+              >
+                <div className="h-10 w-10 flex items-center justify-center rounded-full bg-brand-neon/10 text-brand-neon mb-2 group-hover:scale-110 transition">
+                  <HeartPulse className="h-5 w-5" />
+                </div>
+                <span className="text-xs font-bold text-white">Wellness Hub</span>
               </Link>
 
               <Link

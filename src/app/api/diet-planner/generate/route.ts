@@ -16,6 +16,8 @@ import {
   insertGeneratedDietPlan,
   upsertUserDietPreferences,
 } from "@/lib/diet-planner/db";
+import { buildWellnessDietContext } from "@/lib/wellness/diet-adaptations";
+import { fetchUserWellnessConditions } from "@/lib/wellness/db";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/server";
 
@@ -39,6 +41,7 @@ function buildPrompt(args: {
   indianPriority: boolean;
   affordability: Affordability;
   targets: ReturnType<typeof buildNutritionTargets>;
+  wellnessLines: string[];
 }) {
   const foodLabels = args.foods
     .map((k) => PREFERRED_FOODS.find((f) => f.key === k)?.label ?? k)
@@ -52,6 +55,7 @@ function buildPrompt(args: {
     `Indian food priority: ${args.indianPriority ? "yes — prefer Indian meals and portions" : "standard"}`,
     `Affordability: ${args.affordability} — ${args.affordability === "budget" ? "low-cost staples" : args.affordability === "flexible" ? "premium options OK" : "balanced cost"}`,
     `Daily calorie target ~${args.targets.dailyCalories} kcal, protein ~${args.targets.dailyProteinG}g.`,
+    ...(args.wellnessLines.length > 0 ? ["", ...args.wellnessLines] : []),
     "",
     "Return exactly this JSON shape:",
     JSON.stringify({
@@ -155,6 +159,9 @@ export async function POST(request: NextRequest) {
     const metricsForTargets = metrics ? { ...metrics, goal } : null;
     const targets = buildNutritionTargets(metricsForTargets);
 
+    const wellnessRows = await fetchUserWellnessConditions(supabase, user.id);
+    const wellnessLines = buildWellnessDietContext(wellnessRows);
+
     const prompt = buildPrompt({
       goal,
       foods: preferredFoods,
@@ -162,6 +169,7 @@ export async function POST(request: NextRequest) {
       indianPriority: indianFoodPriority,
       affordability,
       targets,
+      wellnessLines,
     });
 
     let plan: DailyDietPlan | null = null;
