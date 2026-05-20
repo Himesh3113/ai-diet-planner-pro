@@ -2,11 +2,18 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "AI Diet Planner Pro",
-  description: "Premium fitness and diet planning software powered by AI",
+  description:
+    "Personalized AI wellness and Indian diet planning platform with health tracking, recovery insights, and smart nutrition.",
+  keywords: [
+    "AI Diet Planner",
+    "Indian Diet Planner",
+    "Wellness Tracker",
+    "Fitness App",
+    "Nutrition AI",
+  ],
 };
-
 export default function RootLayout({
   children,
 }: Readonly<{
