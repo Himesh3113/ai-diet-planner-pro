@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { buildNutritionTargets } from "@/lib/meal-recommendations/nutrition-from-metrics";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/client";
+import { ChartClientMount } from "./analytics/chart-client-mount";
 import { CHART_AXIS, CHART_GRID, CHART_TOOLTIP, MUTED_LINE, NEON } from "./analytics/chart-styles";
 
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
@@ -389,7 +390,7 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               <ChartCard title="Calorie intake" hint="Only dates with saved food logs">
-                <div className="h-56 w-full">
+                <ChartClientMount className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                       <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" vertical={false} />
@@ -399,11 +400,11 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
                       <Bar dataKey="calories" fill={NEON} radius={[4, 4, 0, 0]} opacity={0.85} />
                     </BarChart>
                   </ResponsiveContainer>
-                </div>
+                </ChartClientMount>
               </ChartCard>
 
               <ChartCard title="Protein intake" hint="Only dates with saved protein values">
-                <div className="h-56 w-full">
+                <ChartClientMount className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                       <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" />
@@ -413,11 +414,11 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
                       <Line type="monotone" dataKey="proteinG" stroke={NEON} strokeWidth={2} dot={{ r: 2, fill: NEON }} />
                     </LineChart>
                   </ResponsiveContainer>
-                </div>
+                </ChartClientMount>
               </ChartCard>
 
               <ChartCard title="Hydration" hint="Only dates with saved hydration logs">
-                <div className="h-56 w-full">
+                <ChartClientMount className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                       <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" vertical={false} />
@@ -427,11 +428,11 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
                       <Bar dataKey="waterMl" fill={MUTED_LINE} radius={[4, 4, 0, 0]} opacity={0.9} />
                     </BarChart>
                   </ResponsiveContainer>
-                </div>
+                </ChartClientMount>
               </ChartCard>
 
               <ChartCard title="Daily target match" hint="Calculated from actual logged days">
-                <div className="h-56 w-full">
+                <ChartClientMount className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={rows.map((row) => ({
@@ -447,7 +448,7 @@ export function ProgressAnalyticsSection({ metrics }: Props) {
                       <Bar dataKey="adherence" fill={NEON} radius={[4, 4, 0, 0]} opacity={0.75} />
                     </BarChart>
                   </ResponsiveContainer>
-                </div>
+                </ChartClientMount>
               </ChartCard>
             </div>
           )}

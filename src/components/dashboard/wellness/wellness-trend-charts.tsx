@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { ChartClientMount } from "@/components/dashboard/health-dashboard/analytics/chart-client-mount";
 import type { WellnessTrendPoint } from "@/lib/wellness/types";
 
 const TOOLTIP_STYLE = {
@@ -57,6 +58,7 @@ export function WellnessTrendCharts({
                 No trend data yet
               </p>
             ) : title === "Hydration" ? (
+              <ChartClientMount className="h-full w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data}>
                   <defs>
@@ -88,7 +90,9 @@ export function WellnessTrendCharts({
                   />
                 </AreaChart>
               </ResponsiveContainer>
+              </ChartClientMount>
             ) : (
+              <ChartClientMount className="h-full w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data}>
                   <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
@@ -114,6 +118,7 @@ export function WellnessTrendCharts({
                   />
                 </LineChart>
               </ResponsiveContainer>
+              </ChartClientMount>
             )}
           </div>
         </div>

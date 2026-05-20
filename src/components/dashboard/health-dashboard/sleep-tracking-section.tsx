@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { ChartClientMount } from "./analytics/chart-client-mount";
 import {
   CHART_AXIS,
   CHART_GRID,
@@ -419,7 +420,7 @@ export function SleepTrackingSection() {
               </div>
 
               {/* Recharts Component */}
-              <div className="h-60 mt-4 w-full">
+              <ChartClientMount className="h-60 mt-4 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
                     data={chartData}
@@ -485,7 +486,7 @@ export function SleepTrackingSection() {
                     />
                   </LineChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartClientMount>
             </div>
             
             <p className="text-[10px] text-white/30 text-center mt-2">

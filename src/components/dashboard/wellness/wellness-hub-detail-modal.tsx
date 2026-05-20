@@ -22,6 +22,7 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
+import { ChartClientMount } from "@/components/dashboard/health-dashboard/analytics/chart-client-mount";
 import { Button } from "@/components/ui/button";
 import { getConditionProfile, getEstimatedTimeline, getSeverityExplanation } from "@/lib/wellness/condition-profiles";
 import { mealAdjustmentsFromProfile } from "@/lib/wellness/insights";
@@ -231,7 +232,7 @@ export function WellnessHubDetailModal({
                   </div>
                 )}
                 {trend.length > 1 && (
-                  <div className="mt-4 h-36">
+                  <ChartClientMount className="mt-4 h-36 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={trend}>
                         <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
@@ -254,7 +255,7 @@ export function WellnessHubDetailModal({
                         />
                       </LineChart>
                     </ResponsiveContainer>
-                  </div>
+                  </ChartClientMount>
                 )}
               </section>
             )}

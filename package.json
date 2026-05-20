@@ -24,6 +24,9 @@
     "zod": "^4.4.3",
     "zustand": "^5.0.13"
   },
+  "overrides": {
+    "react-is": "$react"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

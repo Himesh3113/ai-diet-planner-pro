@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { buildNutritionTargets } from "@/lib/meal-recommendations/nutrition-from-metrics";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/utils/supabase/client";
+import { ChartClientMount } from "./analytics/chart-client-mount";
 import { CHART_AXIS, CHART_GRID, CHART_TOOLTIP, MUTED_LINE, NEON } from "./analytics/chart-styles";
 
 type MetricsRow = Database["public"]["Tables"]["user_metrics"]["Row"];
@@ -283,7 +284,7 @@ export function WeeklyAnalyticsSection() {
               <p className="mt-0.5 text-[10px] text-white/35">
                 Target: {targets.dailyCalories ?? "-"} kcal/day
               </p>
-              <div className="mt-3 h-56 w-full">
+              <ChartClientMount className="mt-3 h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                     <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" vertical={false} />
@@ -293,7 +294,7 @@ export function WeeklyAnalyticsSection() {
                     <Bar dataKey="calories" fill={NEON} radius={[4, 4, 0, 0]} opacity={0.85} />
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartClientMount>
             </div>
 
             <div className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-4">
@@ -301,7 +302,7 @@ export function WeeklyAnalyticsSection() {
               <p className="mt-0.5 text-[10px] text-white/35">
                 Targets: {targets.dailyProteinG ?? "-"} g protein · {targets.hydrationMl ?? "-"} ml water
               </p>
-              <div className="mt-3 h-56 w-full">
+              <ChartClientMount className="mt-3 h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                     <CartesianGrid {...CHART_GRID} strokeDasharray="3 3" />
@@ -312,7 +313,7 @@ export function WeeklyAnalyticsSection() {
                     <Line type="monotone" dataKey="waterMl" name="Water ml" stroke={MUTED_LINE} strokeWidth={2} dot={{ r: 2, fill: MUTED_LINE }} />
                   </LineChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartClientMount>
             </div>
           </div>
         </div>
